@@ -48,6 +48,20 @@ def draw_icon(size: int) -> Image.Image:
         for x, y in (start, end):
             draw.ellipse(r((x - radius, y - radius, x + radius, y + radius)), fill=fill)
 
+    def tremotino_tick(degrees, fill):
+        tangent = degrees + 90
+        outer = polar(286, degrees)
+        rounded_segment(polar(190, degrees), polar(272, degrees), 25, fill)
+        tx = math.cos(math.radians(tangent))
+        ty = math.sin(math.radians(tangent))
+        half = 27
+        rounded_segment(
+            (outer[0] - tx * half, outer[1] - ty * half),
+            (outer[0] + tx * half, outer[1] + ty * half),
+            23,
+            fill,
+        )
+
     def radial_soft_shadow(box, fill, blur):
         layer = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
         layer_draw = ImageDraw.Draw(layer)
@@ -70,17 +84,17 @@ def draw_icon(size: int) -> Image.Image:
 
     draw = ImageDraw.Draw(image)
 
-    # Native progress spinner: minimal rounded ticks with a clockwise opacity sweep.
-    # It reads as motion without becoming a literal mechanical wheel.
+    # Native progress spinner with a quiet Tremotino trace: each tick is a tiny
+    # radial T, softened by the same opacity sweep as a macOS loading indicator.
     for index in range(12):
         degrees = -90 + index * 30
         t = index / 11
-        alpha = lerp(34, 230, t)
-        value = lerp(118, 30, t)
-        rounded_segment(polar(204, degrees), polar(286, degrees), 30, (value, value, value, alpha))
+        alpha = lerp(30, 224, t)
+        value = lerp(132, 30, t)
+        tremotino_tick(degrees, (value, value, value, alpha))
 
-    # A restrained leading tick keeps the spinner legible at small dock sizes.
-    rounded_segment(polar(204, 240), polar(286, 240), 30, (18, 18, 20, 238))
+    # A restrained leading mark keeps the small-size icon crisp.
+    tremotino_tick(240, (18, 18, 20, 238))
 
     # Glassy top edge and hairline border, clipped to the macOS squircle.
     edge = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
