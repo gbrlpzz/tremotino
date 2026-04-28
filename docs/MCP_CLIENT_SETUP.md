@@ -48,3 +48,14 @@ python3 "/Users/gabriele/Documents/New project 3/mcp/tremotino_mcp.py"
 - `list_projects`
 - `list_runbooks`
 - `run_runbook_dry_run`
+- `list_workflows`
+- `get_workflow`
+- `list_prompts`
+- `get_prompt_pack`
+- `get_operating_profile`
+- `list_directories`
+- `assemble_context`
+- `create_codex_job`
+- `list_codex_jobs`
+- `get_codex_job`
+- `propose_gold`

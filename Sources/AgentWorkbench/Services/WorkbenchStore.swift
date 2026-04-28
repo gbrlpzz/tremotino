@@ -11,6 +11,12 @@ final class WorkbenchStore {
     var inboxNotes: [WorkbenchNote] = []
     var proposals: [ReviewProposal] = []
     var projects: [WorkbenchProject] = []
+    var workflows: [VaultDocument] = []
+    var prompts: [VaultDocument] = []
+    var profiles: [VaultDocument] = []
+    var directories: [VaultDocument] = []
+    var goldItems: [VaultDocument] = []
+    var codexJobs: [CodexJob] = []
     var registrySnapshots: [RegistrySnapshot] = []
     var runbooks: [Runbook] = []
     var indexCount = 0
@@ -36,6 +42,12 @@ final class WorkbenchStore {
     func refresh() throws {
         inboxNotes = try markdownStore.listInboxNotes()
         proposals = try markdownStore.listReviewProposals()
+        workflows = try markdownStore.listDocuments(type: .workflow)
+        prompts = try markdownStore.listDocuments(type: .prompt)
+        profiles = try markdownStore.listDocuments(type: .profile)
+        directories = try markdownStore.listDocuments(type: .directory)
+        goldItems = try markdownStore.listDocuments(type: .gold)
+        codexJobs = try markdownStore.listCodexJobs()
     }
 
     func saveCapture() {
@@ -78,6 +90,102 @@ final class WorkbenchStore {
             statusMessage = "Rejected proposal"
         } catch {
             statusMessage = "Reject failed: \(error.localizedDescription)"
+        }
+    }
+
+    func saveDocument(_ document: VaultDocument) {
+        do {
+            try markdownStore.saveDocument(document)
+            try refresh()
+            statusMessage = "Saved \(document.type.title.lowercased())"
+        } catch {
+            statusMessage = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    func spinIntoGold(title: String, body: String, source: String) {
+        do {
+            try markdownStore.createGold(title: title, body: body, source: source)
+            try refresh()
+            statusMessage = "Spun raw material into Gold"
+        } catch {
+            statusMessage = "Gold creation failed: \(error.localizedDescription)"
+        }
+    }
+
+    func createCodexJob(from document: VaultDocument) {
+        let workingDirectory = paths.vaultRoot.path
+        let prompt = """
+        You are running from Tremotino, a local agent operating hub.
+
+        Workflow/Object:
+        \(document.title)
+
+        Object type:
+        \(document.type.rawValue)
+
+        Task:
+        Improve or act on this typed Tremotino object according to its contents. You may directly edit typed private Tremotino vault objects. Keep changes scoped to the writable paths and preserve the Markdown/frontmatter structure.
+
+        Content:
+        \(document.body)
+        """
+
+        do {
+            _ = try markdownStore.createCodexJob(
+                title: "Codex: \(document.title)",
+                workflow: document.title,
+                prompt: prompt,
+                workingDirectory: workingDirectory,
+                writablePaths: [paths.vaultRoot.path]
+            )
+            try refresh()
+            statusMessage = "Queued Codex job"
+        } catch {
+            statusMessage = "Job creation failed: \(error.localizedDescription)"
+        }
+    }
+
+    func createCodexJob(from note: WorkbenchNote) {
+        let prompt = """
+        You are running from Tremotino.
+
+        Convert this raw inbox item into a useful typed Tremotino object. Prefer `gold`, `workflow`, `prompt`, `profile`, or `directory` depending on the content. Edit only the Tremotino vault.
+
+        Inbox item:
+        \(note.title)
+
+        \(note.body)
+        """
+
+        do {
+            _ = try markdownStore.createCodexJob(
+                title: "Spin inbox into gold: \(note.title)",
+                workflow: "Spin Into Gold",
+                prompt: prompt,
+                workingDirectory: paths.vaultRoot.path,
+                writablePaths: [paths.vaultRoot.path]
+            )
+            try refresh()
+            statusMessage = "Queued Codex job from inbox"
+        } catch {
+            statusMessage = "Job creation failed: \(error.localizedDescription)"
+        }
+    }
+
+    func runCodexJob(_ job: CodexJob) {
+        Task {
+            do {
+                try markdownStore.updateCodexJob(job, status: "running", startedAt: Date())
+                try refresh()
+                let exitCode = await CodexJobRunner(vaultRoot: paths.vaultRoot).run(job: job)
+                let refreshedJob = (try? markdownStore.listCodexJobs().first { $0.path == job.path }) ?? job
+                try markdownStore.updateCodexJob(refreshedJob, status: exitCode == 0 ? "completed" : "failed", finishedAt: Date(), exitCode: Int(exitCode))
+                try refresh()
+                statusMessage = "Codex job finished with exit \(exitCode)"
+            } catch {
+                statusMessage = "Codex job failed: \(error.localizedDescription)"
+            }
         }
     }
 

@@ -2,9 +2,15 @@ import Foundation
 
 enum SidebarItem: String, CaseIterable, Identifiable {
     case inbox
+    case workflows
+    case prompts
+    case profile
+    case directories
+    case jobs
     case projects
     case review
     case runbooks
+    case gold
     case registry
     case settings
 
@@ -13,9 +19,15 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .inbox: "Inbox"
+        case .workflows: "Workflows"
+        case .prompts: "Prompts"
+        case .profile: "Profile"
+        case .directories: "Directories"
+        case .jobs: "Jobs"
         case .projects: "Projects"
         case .review: "Review Queue"
         case .runbooks: "Runbooks"
+        case .gold: "Gold"
         case .registry: "Registry"
         case .settings: "Settings"
         }
@@ -24,11 +36,39 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .inbox: "tray"
+        case .workflows: "flowchart"
+        case .prompts: "text.quote"
+        case .profile: "person.crop.square"
+        case .directories: "folder.badge.gearshape"
+        case .jobs: "terminal"
         case .projects: "folder"
         case .review: "checklist"
         case .runbooks: "play.square"
+        case .gold: "seal"
         case .registry: "antenna.radiowaves.left.and.right"
         case .settings: "gearshape"
+        }
+    }
+}
+
+enum VaultObjectType: String, CaseIterable, Identifiable {
+    case workflow
+    case prompt
+    case profile
+    case directory
+    case codexJob = "codex_job"
+    case gold
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .workflow: "Workflow"
+        case .prompt: "Prompt"
+        case .profile: "Profile"
+        case .directory: "Directory"
+        case .codexJob: "Codex Job"
+        case .gold: "Gold"
         }
     }
 }
@@ -102,12 +142,40 @@ struct RegistrySnapshot: Hashable {
     var status: String
 }
 
+struct VaultDocument: Identifiable, Hashable {
+    let id: UUID
+    var title: String
+    var type: VaultObjectType
+    var body: String
+    var path: URL
+    var createdAt: Date
+    var status: String?
+}
+
+struct CodexJob: Identifiable, Hashable {
+    let id: UUID
+    var title: String
+    var status: String
+    var workflow: String
+    var workingDirectory: String
+    var writablePaths: [String]
+    var path: URL
+    var createdAt: Date
+    var exitCode: Int?
+}
+
 struct WorkbenchPaths {
     let vaultRoot: URL
     let inbox: URL
+    let workflows: URL
+    let prompts: URL
+    let profile: URL
+    let directories: URL
+    let jobs: URL
     let projects: URL
     let review: URL
     let runbooks: URL
+    let gold: URL
     let supportRoot: URL
     let indexFile: URL
     let mcpServer: URL
@@ -131,9 +199,15 @@ struct WorkbenchPaths {
         return WorkbenchPaths(
             vaultRoot: vaultRoot,
             inbox: vaultRoot.appendingPathComponent("Inbox"),
+            workflows: vaultRoot.appendingPathComponent("Workflows"),
+            prompts: vaultRoot.appendingPathComponent("Prompts"),
+            profile: vaultRoot.appendingPathComponent("Profile"),
+            directories: vaultRoot.appendingPathComponent("Directories"),
+            jobs: vaultRoot.appendingPathComponent("Jobs"),
             projects: vaultRoot.appendingPathComponent("Projects"),
             review: vaultRoot.appendingPathComponent("Review Queue"),
             runbooks: vaultRoot.appendingPathComponent("Runbooks"),
+            gold: vaultRoot.appendingPathComponent("Gold"),
             supportRoot: supportRoot,
             indexFile: supportRoot.appendingPathComponent("index.json"),
             mcpServer: packageRoot.appendingPathComponent("mcp/tremotino_mcp.py")

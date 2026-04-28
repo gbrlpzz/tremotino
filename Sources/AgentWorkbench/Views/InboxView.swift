@@ -21,6 +21,14 @@ struct InboxView: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
+                        HStack {
+                            Button("Send to Codex") {
+                                store.createCodexJob(from: note)
+                            }
+                            Button("Spin into Gold") {
+                                store.spinIntoGold(title: note.title, body: note.body, source: note.path.path)
+                            }
+                        }
                     }
                     .padding(.vertical, 4)
                 }

@@ -7,12 +7,24 @@ struct DetailView: View {
         switch store.selection ?? .inbox {
         case .inbox:
             InboxView()
+        case .workflows:
+            TypedDocumentsView(type: .workflow)
+        case .prompts:
+            TypedDocumentsView(type: .prompt)
+        case .profile:
+            TypedDocumentsView(type: .profile)
+        case .directories:
+            TypedDocumentsView(type: .directory)
+        case .jobs:
+            JobsView()
         case .projects:
             ProjectsView()
         case .review:
             ReviewQueueView()
         case .runbooks:
             RunbooksView()
+        case .gold:
+            TypedDocumentsView(type: .gold)
         case .registry:
             RegistryView()
         case .settings:

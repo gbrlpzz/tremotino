@@ -25,8 +25,14 @@ VAULT = Path(
 )
 REVIEW = VAULT / "Review Queue"
 INBOX = VAULT / "Inbox"
+WORKFLOWS = VAULT / "Workflows"
+PROMPTS = VAULT / "Prompts"
+PROFILE = VAULT / "Profile"
+DIRECTORIES = VAULT / "Directories"
+JOBS = VAULT / "Jobs"
 PROJECTS = VAULT / "Projects"
 RUNBOOKS = VAULT / "Runbooks"
+GOLD = VAULT / "Gold"
 
 
 TOOLS = [
@@ -102,11 +108,72 @@ TOOLS = [
             "required": ["id"],
         },
     },
+    {"name": "list_workflows", "description": "List typed Tremotino workflow objects.", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "get_workflow",
+        "description": "Fetch a workflow by title or path.",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
+    },
+    {"name": "list_prompts", "description": "List system, tone, writing style, and adapter prompts.", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "get_prompt_pack",
+        "description": "Fetch shared operating prompt plus optional client adapter and style guide.",
+        "inputSchema": {"type": "object", "properties": {"client": {"type": "string"}}, "required": []},
+    },
+    {"name": "get_operating_profile", "description": "Fetch private operating profile notes.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "list_directories", "description": "List manually registered directory notes.", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "assemble_context",
+        "description": "Assemble workflow, prompt pack, profile, directories, and gold context for an agent task.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string"},
+                "client": {"type": "string"},
+                "workflow": {"type": "string"},
+            },
+            "required": ["task"],
+        },
+    },
+    {
+        "name": "create_codex_job",
+        "description": "Create a queued Codex CLI job in the private Tremotino vault.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "prompt": {"type": "string"},
+                "workflow": {"type": "string"},
+                "working_directory": {"type": "string"},
+                "writable_paths": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["title", "prompt"],
+        },
+    },
+    {"name": "list_codex_jobs", "description": "List queued and completed Codex jobs.", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "get_codex_job",
+        "description": "Fetch a Codex job by title or path.",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
+    },
+    {
+        "name": "propose_gold",
+        "description": "Create a gold item from refined reusable context.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "content": {"type": "string"},
+                "source": {"type": "string"},
+            },
+            "required": ["title", "content"],
+        },
+    },
 ]
 
 
 def ensure_dirs() -> None:
-    for directory in (VAULT, REVIEW, INBOX, PROJECTS, RUNBOOKS):
+    for directory in (VAULT, REVIEW, INBOX, WORKFLOWS, PROMPTS, PROFILE, DIRECTORIES, JOBS, PROJECTS, RUNBOOKS, GOLD):
         directory.mkdir(parents=True, exist_ok=True)
 
 
@@ -131,6 +198,48 @@ def title_for(path: Path, content: str | None = None) -> str:
         if line.startswith("# "):
             return line[2:].strip()
     return path.stem
+
+
+def frontmatter_value(content: str, key: str) -> str | None:
+    for line in content.splitlines():
+        if line.startswith(f"{key}:"):
+            return line.split(":", 1)[1].strip().strip('"')
+    return None
+
+
+def body_for(content: str) -> str:
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) == 3:
+            return parts[2].strip()
+    return content
+
+
+def list_docs(directory: Path) -> list[dict[str, str]]:
+    if not directory.exists():
+        return []
+    items = []
+    for path in sorted(directory.glob("*.md")):
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        items.append({
+            "title": title_for(path, content),
+            "type": frontmatter_value(content, "type") or "",
+            "path": str(path),
+            "excerpt": re.sub(r"\s+", " ", body_for(content))[:260],
+        })
+    return items
+
+
+def fetch_from(directory: Path, identifier: str) -> str:
+    candidate = Path(identifier).expanduser()
+    if candidate.exists() and candidate.is_file():
+        return candidate.read_text(encoding="utf-8", errors="ignore")
+    lowered = identifier.lower()
+    for path in sorted(directory.rglob("*.md")) if directory.exists() else []:
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        if lowered in title_for(path, content).lower() or lowered in str(path).lower():
+            return content
+    return f"No document found for {identifier}"
 
 
 def text_response(text: str) -> dict[str, Any]:
@@ -240,6 +349,142 @@ def run_runbook_dry_run(args: dict[str, Any]) -> dict[str, Any]:
     return text_response(commands.get(runbook_id, f"Unknown runbook: {runbook_id}"))
 
 
+def list_workflows(_: dict[str, Any]) -> dict[str, Any]:
+    return text_response(json.dumps(list_docs(WORKFLOWS), indent=2))
+
+
+def get_workflow(args: dict[str, Any]) -> dict[str, Any]:
+    return text_response(fetch_from(WORKFLOWS, str(args.get("id", ""))))
+
+
+def list_prompts(_: dict[str, Any]) -> dict[str, Any]:
+    return text_response(json.dumps(list_docs(PROMPTS), indent=2))
+
+
+def get_prompt_pack(args: dict[str, Any]) -> dict[str, Any]:
+    client = str(args.get("client", "shared")).lower()
+    pieces = []
+    for name in ("shared", "style", client):
+        for path in sorted(PROMPTS.glob("*.md")) if PROMPTS.exists() else []:
+            if name in path.stem.lower() or (name == "style" and "writing" in path.stem.lower()):
+                pieces.append(f"## {title_for(path)}\nPath: {path}\n\n{path.read_text(encoding='utf-8', errors='ignore')}")
+    return text_response("\n\n---\n\n".join(pieces) or "No prompt pack found.")
+
+
+def get_operating_profile(_: dict[str, Any]) -> dict[str, Any]:
+    pieces = []
+    for path in sorted(PROFILE.glob("*.md")) if PROFILE.exists() else []:
+        pieces.append(f"## {title_for(path)}\nPath: {path}\n\n{path.read_text(encoding='utf-8', errors='ignore')}")
+    return text_response("\n\n---\n\n".join(pieces) or "No operating profile found.")
+
+
+def list_directories(_: dict[str, Any]) -> dict[str, Any]:
+    return text_response(json.dumps(list_docs(DIRECTORIES), indent=2))
+
+
+def assemble_context(args: dict[str, Any]) -> dict[str, Any]:
+    task = str(args.get("task", ""))
+    client = str(args.get("client", "codex"))
+    workflow_query = str(args.get("workflow", task))
+    sections = [
+        "# Tremotino Context Bundle",
+        f"Task: {task}",
+        "## Operating Profile",
+        get_operating_profile({})["content"][0]["text"],
+        "## Prompt Pack",
+        get_prompt_pack({"client": client})["content"][0]["text"],
+        "## Workflow",
+        fetch_from(WORKFLOWS, workflow_query),
+        "## Directories",
+        json.dumps(list_docs(DIRECTORIES), indent=2),
+        "## Gold Matches",
+        build_project_context({"query": task})["content"][0]["text"],
+    ]
+    return text_response("\n\n".join(sections))
+
+
+def create_codex_job(args: dict[str, Any]) -> dict[str, Any]:
+    ensure_dirs()
+    title = str(args.get("title", "Untitled Codex Job"))
+    prompt = str(args.get("prompt", ""))
+    workflow = str(args.get("workflow", "manual"))
+    working_directory = str(args.get("working_directory", VAULT))
+    writable_paths = args.get("writable_paths", [str(VAULT)])
+    if not isinstance(writable_paths, list):
+        writable_paths = [str(writable_paths)]
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    folder = JOBS / f"{stamp}-{slugify(title)}"
+    folder.mkdir(parents=True, exist_ok=True)
+    job = folder / "job.md"
+    safe_title = title.replace('"', '\\"')
+    safe_workflow = workflow.replace('"', '\\"')
+    safe_working_directory = working_directory.replace('"', '\\"')
+    safe_writable_paths = "|".join(map(str, writable_paths)).replace('"', '\\"')
+    body = f"""---
+title: "{safe_title}"
+type: codex_job
+status: queued
+workflow: "{safe_workflow}"
+client: codex
+working_directory: "{safe_working_directory}"
+sandbox: workspace-write
+writable_paths: "{safe_writable_paths}"
+created_at: {dt.datetime.now(dt.timezone.utc).isoformat()}
+started_at:
+finished_at:
+exit_code:
+---
+
+# {title}
+
+Job artifacts live next to this file.
+"""
+    job.write_text(body, encoding="utf-8")
+    (folder / "prompt.md").write_text(prompt, encoding="utf-8")
+    return text_response(f"Codex job queued: {job}")
+
+
+def list_codex_jobs(_: dict[str, Any]) -> dict[str, Any]:
+    items = []
+    for job in sorted(JOBS.glob("*/job.md")) if JOBS.exists() else []:
+        content = job.read_text(encoding="utf-8", errors="ignore")
+        items.append({
+            "title": title_for(job, content),
+            "status": frontmatter_value(content, "status") or "unknown",
+            "workflow": frontmatter_value(content, "workflow") or "",
+            "path": str(job),
+        })
+    return text_response(json.dumps(items, indent=2))
+
+
+def get_codex_job(args: dict[str, Any]) -> dict[str, Any]:
+    return text_response(fetch_from(JOBS, str(args.get("id", ""))))
+
+
+def propose_gold(args: dict[str, Any]) -> dict[str, Any]:
+    ensure_dirs()
+    title = str(args.get("title", "Untitled Gold"))
+    content = str(args.get("content", ""))
+    source = str(args.get("source", "mcp-agent"))
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    path = GOLD / f"{stamp}-{slugify(title)}.md"
+    safe_title = title.replace('"', '\\"')
+    safe_source = source.replace('"', '\\"')
+    body = f"""---
+title: "{safe_title}"
+type: gold
+source: "{safe_source}"
+created_at: {dt.datetime.now(dt.timezone.utc).isoformat()}
+---
+
+# {title}
+
+{content}
+"""
+    path.write_text(body, encoding="utf-8")
+    return text_response(f"Gold created: {path}")
+
+
 CALLS = {
     "search": search,
     "fetch": fetch,
@@ -249,6 +494,17 @@ CALLS = {
     "list_projects": list_projects,
     "list_runbooks": list_runbooks,
     "run_runbook_dry_run": run_runbook_dry_run,
+    "list_workflows": list_workflows,
+    "get_workflow": get_workflow,
+    "list_prompts": list_prompts,
+    "get_prompt_pack": get_prompt_pack,
+    "get_operating_profile": get_operating_profile,
+    "list_directories": list_directories,
+    "assemble_context": assemble_context,
+    "create_codex_job": create_codex_job,
+    "list_codex_jobs": list_codex_jobs,
+    "get_codex_job": get_codex_job,
+    "propose_gold": propose_gold,
 }
 
 

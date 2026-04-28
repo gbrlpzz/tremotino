@@ -12,6 +12,8 @@ This repository contains an early SwiftUI prototype. It includes:
 - A Markdown-first vault stored outside the repository by default at `~/Documents/Tremotino/Vault`.
 - A disposable generated index stored outside the repository at `~/Library/Application Support/Tremotino/`.
 - A local stdio MCP server with search, fetch, proposal, project context, and runbook tools.
+- A Codex CLI job queue for scoped `codex exec` workflows.
+- Typed Markdown vault objects for workflows, prompts, profile, directories, jobs, and gold items.
 - A minimal black-and-white macOS icon.
 
 ## Design principles
@@ -19,6 +21,7 @@ This repository contains an early SwiftUI prototype. It includes:
 - Markdown files are the source of truth.
 - Generated indexes are disposable and rebuildable.
 - Agent writes are proposals by default, not silent durable memory changes.
+- Typed private vault objects can be edited by scoped Codex jobs when launched from the app.
 - Local project ingestion is read-only and creates reviewable updates.
 - The public MCP interface should stay small, stable, and client-neutral.
 - Private vault data should not be committed to this repository.
@@ -69,6 +72,14 @@ It exposes:
 - `run_runbook_dry_run`
 
 See `docs/MCP_CLIENT_SETUP.md` for client setup notes.
+
+## Codex jobs
+
+Tremotino can queue and run scoped Codex CLI jobs. Job data is written under the private vault, not this repository. Each job stores a prompt, JSONL events, final output, and pre/post vault snapshots.
+
+App-launched jobs use `workspace-write` with explicit writable paths and never use the dangerous no-sandbox mode.
+
+The current runner pins `gpt-5.2` because the installed Codex CLI on this machine rejects newer configured defaults. This should become a user setting once the job launcher matures.
 
 ## Data policy
 
