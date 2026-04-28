@@ -11,30 +11,63 @@ iconset.mkdir(exist_ok=True)
 
 
 def draw_icon(size: int) -> Image.Image:
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 255))
+    scale = 4
+    canvas = 1024 * scale
+    image = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 255))
     draw = ImageDraw.Draw(image)
-    unit = size / 1024
-
-    # Hyper-minimal Tremotino mark: a monoline T that also reads as a hinge/path.
-    stroke = round(72 * unit)
-    radius = stroke // 2
     white = (255, 255, 255, 255)
-    left = round(282 * unit)
-    right = round(742 * unit)
-    top = round(302 * unit)
-    mid = round(512 * unit)
-    bottom = round(740 * unit)
 
-    draw.rounded_rectangle((left, top, right, top + stroke), radius=radius, fill=white)
-    draw.rounded_rectangle((mid - stroke // 2, top, mid + stroke // 2, bottom), radius=radius, fill=white)
+    def p(points):
+        return [(round(x * scale), round(y * scale)) for x, y in points]
 
-    # Small offset cut-in gives the logo a less generic, more "agent path" feel.
-    cut = round(118 * unit)
-    draw.rounded_rectangle(
-        (mid + stroke // 2, mid - stroke // 2, mid + stroke // 2 + cut, mid + stroke // 2),
-        radius=radius,
-        fill=white,
-    )
+    def r(box):
+        return tuple(round(v * scale) for v in box)
+
+    # Tremotino mark: an industrial T/spindle glyph with a pointed cap.
+    # The reference to the Grimm figure is reduced to geometry, avoiding
+    # illustration while keeping the name-specific silhouette.
+    draw.polygon(p([
+        (318, 260),
+        (512, 128),
+        (706, 260),
+        (656, 322),
+        (368, 322),
+    ]), fill=white)
+
+    # Horizontal crossbar with hard chamfered ends.
+    draw.polygon(p([
+        (246, 342),
+        (778, 342),
+        (724, 426),
+        (300, 426),
+    ]), fill=white)
+
+    # Central spindle/stem.
+    draw.polygon(p([
+        (464, 398),
+        (560, 398),
+        (560, 762),
+        (512, 824),
+        (464, 762),
+    ]), fill=white)
+
+    # Thread path: a single angular diagonal that breaks the rigid monogram.
+    draw.polygon(p([
+        (324, 610),
+        (372, 554),
+        (700, 554),
+        (748, 610),
+        (702, 666),
+        (374, 666),
+    ]), fill=white)
+
+    # Black counter-cut restores the spindle through the thread band.
+    draw.rectangle(r((486, 508, 538, 718)), fill=(0, 0, 0, 255))
+
+    # Small white pin at the center, like an instrument detail.
+    draw.ellipse(r((489, 573, 535, 619)), fill=white)
+
+    image = image.resize((size, size), Image.Resampling.LANCZOS)
     return image
 
 
