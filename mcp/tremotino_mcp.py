@@ -326,6 +326,8 @@ def title_for(path: Path, content: str | None = None) -> str:
     for line in content.splitlines():
         if line.startswith("title:"):
             return line.split(":", 1)[1].strip().strip('"')
+        if line.startswith("name:"):
+            return line.split(":", 1)[1].strip().strip('"')
     for line in content.splitlines():
         if line.startswith("# "):
             return line[2:].strip()
@@ -370,6 +372,20 @@ def list_still_docs() -> list[dict[str, str]]:
         item["media_path"] = media_path
         item["license_privacy"] = frontmatter_value(content, "license_privacy") or inline_value(content, "license_privacy") or "private"
         item["intended_agent_use"] = inline_value(content, "intended_agent_use") or ""
+    return items
+
+
+def list_skill_docs() -> list[dict[str, str]]:
+    items = list_docs(SKILLS)
+    if PLUGINS.exists():
+        for path in sorted(PLUGINS.rglob("SKILL.md")):
+            content = path.read_text(encoding="utf-8", errors="ignore")
+            items.append({
+                "title": title_for(path, content),
+                "type": "skill",
+                "path": str(path),
+                "excerpt": re.sub(r"\s+", " ", body_for(content))[:260],
+            })
     return items
 
 
@@ -820,11 +836,15 @@ created_at: {dt.datetime.now(dt.timezone.utc).isoformat()}
 
 
 def list_skills(_: dict[str, Any]) -> dict[str, Any]:
-    return text_response(json.dumps(list_docs(SKILLS), indent=2))
+    return text_response(json.dumps(list_skill_docs(), indent=2))
 
 
 def get_skill(args: dict[str, Any]) -> dict[str, Any]:
-    return text_response(fetch_from(SKILLS, str(args.get("id", ""))))
+    identifier = str(args.get("id", ""))
+    primary = fetch_from(SKILLS, identifier)
+    if not primary.startswith("No document found"):
+        return text_response(primary)
+    return text_response(fetch_from(PLUGINS, identifier))
 
 
 def list_plugins(_: dict[str, Any]) -> dict[str, Any]:
@@ -871,7 +891,7 @@ def assemble_context_pack(args: dict[str, Any]) -> dict[str, Any]:
         "## Prompt Pack",
         get_prompt_pack({"client": client})["content"][0]["text"],
         "## Skills",
-        json.dumps(list_docs(SKILLS), indent=2),
+        json.dumps(list_skill_docs(), indent=2),
         "## Design",
         "\n\n---\n\n".join(
             path.read_text(encoding="utf-8", errors="ignore")

@@ -564,7 +564,13 @@ struct MarkdownStore {
 
     func listDocuments(type: VaultObjectType) throws -> [VaultDocument] {
         let directory = directory(for: type)
-        return try listMarkdown(in: directory).map { document(from: $0, type: type) }
+        let files: [URL]
+        if type == .skill {
+            files = try listMarkdown(in: directory) + pluginSkillMarkdownFiles()
+        } else {
+            files = try listMarkdown(in: directory)
+        }
+        return files.map { document(from: $0, type: type) }
             .sorted { $0.createdAt > $1.createdAt }
     }
 
@@ -656,6 +662,13 @@ struct MarkdownStore {
     private func allMarkdownFiles(in directory: URL) throws -> [URL] {
         guard let enumerator = fileManager.enumerator(at: directory, includingPropertiesForKeys: nil) else { return [] }
         return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "md" }
+    }
+
+    private func pluginSkillMarkdownFiles() throws -> [URL] {
+        guard let enumerator = fileManager.enumerator(at: paths.plugins, includingPropertiesForKeys: nil) else { return [] }
+        return enumerator
+            .compactMap { $0 as? URL }
+            .filter { $0.lastPathComponent == "SKILL.md" }
     }
 
     private func note(from url: URL) -> WorkbenchNote {
@@ -839,7 +852,7 @@ struct MarkdownStore {
     }
 
     private func title(from content: String, fallback: String) -> String {
-        frontmatterValue("title", in: content) ?? content
+        frontmatterValue("title", in: content) ?? frontmatterValue("name", in: content) ?? content
             .split(separator: "\n")
             .first(where: { $0.hasPrefix("# ") })?
             .dropFirst(2)

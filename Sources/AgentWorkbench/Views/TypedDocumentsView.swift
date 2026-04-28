@@ -9,6 +9,7 @@ struct TypedDocumentsView: View {
     @State private var draft: VaultDocument?
     @State private var haySourcePaths = ""
     @State private var showHaySourcePicker = false
+    @State private var searchText = ""
 
     private var documents: [VaultDocument] {
         switch type {
@@ -25,6 +26,16 @@ struct TypedDocumentsView: View {
         case .hay: store.hayItems
         case .codexJob: []
         case .gold: store.goldItems
+        }
+    }
+
+    private var visibleDocuments: [VaultDocument] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return documents }
+        return documents.filter { document in
+            document.title.lowercased().contains(query)
+                || document.body.lowercased().contains(query)
+                || document.path.path.lowercased().contains(query)
         }
     }
 
@@ -61,27 +72,13 @@ struct TypedDocumentsView: View {
             }
 
             HStack(alignment: .top, spacing: 16) {
-                List(documents, selection: $selectedID) { document in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(document.title)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-                        Text(document.path.lastPathComponent)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .tag(document.id)
-                }
+                DocumentSidebarList(documents: visibleDocuments, selectedID: $selectedID)
                 .frame(minWidth: 240, maxWidth: 320)
                 .onChange(of: selectedID) { _, newValue in
-                    draft = documents.first { $0.id == newValue }
+                    selectDocument(newValue)
                 }
                 .onAppear {
-                    if selectedID == nil {
-                        selectedID = documents.first?.id
-                        draft = documents.first
-                    }
+                    selectInitialDocumentIfNeeded()
                 }
 
                 if let binding = draftBinding {
@@ -132,6 +129,7 @@ struct TypedDocumentsView: View {
             FooterStatusView()
         }
         .padding(showsHeader ? 16 : 0)
+        .searchable(text: $searchText, prompt: "Search \(sectionTitle.lowercased())")
         .fileImporter(
             isPresented: $showHaySourcePicker,
             allowedContentTypes: [.item, .folder],
@@ -161,6 +159,23 @@ struct TypedDocumentsView: View {
             .filter { !$0.isEmpty }
     }
 
+    private func selectDocument(_ id: UUID?) {
+        guard let id else {
+            draft = nil
+            return
+        }
+        let visibleMatch = visibleDocuments.first { document in document.id == id }
+        let fullMatch = documents.first { document in document.id == id }
+        draft = visibleMatch ?? fullMatch
+    }
+
+    private func selectInitialDocumentIfNeeded() {
+        guard selectedID == nil else { return }
+        let firstDocument = visibleDocuments.first
+        selectedID = firstDocument?.id
+        draft = firstDocument
+    }
+
     private var sectionTitle: String {
         switch type {
         case .workflow: "Workflows"
@@ -179,6 +194,15 @@ struct TypedDocumentsView: View {
         }
     }
 
+    fileprivate static func subtitle(for document: VaultDocument) -> String {
+        if document.path.lastPathComponent == "SKILL.md" {
+            let parent = document.path.deletingLastPathComponent().lastPathComponent
+            let plugin = document.path.path.contains("/Plugins/") ? "Plugin skill" : "Skill"
+            return "\(plugin) / \(parent)"
+        }
+        return document.path.lastPathComponent
+    }
+
     private var sectionSubtitle: String {
         switch type {
         case .workflow: "Reusable agent workflows for Codex, Claude, and future clients."
@@ -194,6 +218,35 @@ struct TypedDocumentsView: View {
         case .hay: "Disordered raw material queued for Codex extraction into durable Gold and typed assets."
         case .codexJob: "Queued and completed Codex CLI jobs."
         case .gold: "Refined reusable context spun from raw material."
+        }
+    }
+}
+
+private struct DocumentSidebarList: View {
+    let documents: [VaultDocument]
+    @Binding var selectedID: UUID?
+
+    var body: some View {
+        List(documents, selection: $selectedID) { document in
+            DocumentListRow(title: document.title, subtitle: TypedDocumentsView.subtitle(for: document))
+                .tag(document.id)
+        }
+    }
+}
+
+private struct DocumentListRow: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .fontWeight(.medium)
+                .lineLimit(1)
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 }

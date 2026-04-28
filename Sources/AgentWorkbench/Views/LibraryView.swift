@@ -1,9 +1,9 @@
 import SwiftUI
 
 private enum LibraryTab: String, CaseIterable, Identifiable {
+    case skills
     case bibliography
     case gold
-    case skills
     case prompts
     case workflows
     case profile
@@ -18,9 +18,9 @@ private enum LibraryTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .skills: "Skills"
         case .bibliography: "Bibliography"
         case .gold: "Gold"
-        case .skills: "Skills"
         case .prompts: "Prompts"
         case .workflows: "Workflows"
         case .profile: "Profile"
@@ -35,11 +35,11 @@ private enum LibraryTab: String, CaseIterable, Identifiable {
 }
 
 struct LibraryView: View {
-    @State private var selectedTab: LibraryTab = .bibliography
+    @State private var selectedTab: LibraryTab = .skills
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HeaderView(title: "Agent Hub", subtitle: "Cross-agent MCP memory, skills, prompts, files, and design assets for Codex and Claude.")
+            HeaderView(title: "Agent Hub", subtitle: "Central context and skill management for Codex, Claude, and future agents.")
 
             HStack {
                 Picker("Agent asset", selection: $selectedTab) {
@@ -54,12 +54,12 @@ struct LibraryView: View {
             }
 
             switch selectedTab {
+            case .skills:
+                TypedDocumentsView(type: .skill, showsHeader: false)
             case .bibliography:
                 BibliographyView(showsHeader: false)
             case .gold:
                 TypedDocumentsView(type: .gold, showsHeader: false)
-            case .skills:
-                TypedDocumentsView(type: .skill, showsHeader: false)
             case .prompts:
                 TypedDocumentsView(type: .prompt, showsHeader: false)
             case .workflows:

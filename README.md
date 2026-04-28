@@ -1,8 +1,8 @@
 # Tremotino
 
-Tremotino is a local-first macOS workbench for Markdown memory, project context, and MCP-based agent workflows.
+Tremotino is a local-first macOS workbench for Markdown memory, project context, skill management, and MCP-based agent workflows.
 
-It is designed as a personal second-brain foundation rather than a general notes clone. The app keeps durable knowledge in plain Markdown, exposes a local MCP server for agents, and routes agent-written updates through a review queue before they become part of long-term memory.
+It is designed as a personal second-brain foundation and central agent context system rather than a general notes clone. The app keeps durable knowledge in plain Markdown, exposes a local MCP server for agents, and routes agent-written updates through a review queue before they become part of long-term memory.
 
 ## Current status
 
@@ -15,6 +15,7 @@ This repository contains an early SwiftUI prototype. It includes:
 - A Codex CLI job queue for scoped `codex exec` workflows.
 - Typed Markdown vault objects for workflows, prompts, profile, directories, jobs, and gold items.
 - Agent assets for skills, curated plugin packs, `DESIGN.md` files, stills, context packs, and hay ingestion.
+- Automatic skill loading from `Skills/*.md` and any installed plugin-pack `SKILL.md` files.
 - Native bibliography management with BibTeX import, editable Markdown reference entries, validation, and MCP tools.
 - A minimal black-and-white macOS icon.
 
