@@ -7,6 +7,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
 EXECUTABLE="$APP_DIR/Contents/MacOS/$APP_NAME"
+BUILD_VERSION="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
 
 cd "$ROOT_DIR"
 
@@ -16,6 +17,7 @@ fi
 
 swift build
 
+rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp ".build/debug/$PRODUCT" "$EXECUTABLE"
 chmod +x "$EXECUTABLE"
@@ -37,6 +39,10 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <string>Tremotino</string>
   <key>CFBundleName</key>
   <string>Tremotino</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1</string>
+  <key>CFBundleVersion</key>
+  <string>$BUILD_VERSION</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>
