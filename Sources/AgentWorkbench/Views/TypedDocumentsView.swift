@@ -197,8 +197,13 @@ struct TypedDocumentsView: View {
     fileprivate static func subtitle(for document: VaultDocument) -> String {
         if document.path.lastPathComponent == "SKILL.md" {
             let parent = document.path.deletingLastPathComponent().lastPathComponent
-            let plugin = document.path.path.contains("/Plugins/") ? "Plugin skill" : "Skill"
-            return "\(plugin) / \(parent)"
+            if document.path.path.contains("/External/") {
+                return "External skill / \(parent)"
+            }
+            if document.path.path.contains("/Packs/") {
+                return "Pack skill / \(parent)"
+            }
+            return "Skill / \(parent)"
         }
         return document.path.lastPathComponent
     }

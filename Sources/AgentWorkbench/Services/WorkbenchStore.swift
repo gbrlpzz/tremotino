@@ -3,7 +3,7 @@ import Observation
 
 @Observable
 final class WorkbenchStore {
-    var selection: SidebarItem? = .capture
+    var selection: SidebarItem? = .skills
     var showQuickCapture = false
     var captureTitle = ""
     var captureBody = ""
@@ -31,6 +31,15 @@ final class WorkbenchStore {
 
     let paths = WorkbenchPaths.defaults
     private var markdownStore: MarkdownStore { MarkdownStore(paths: paths) }
+    private var citableSourceRule: String {
+        """
+        Citable source rule:
+        - When you consult a citable source for drafting, research, design direction, code provenance, or factual support, record it in Tremotino Bibliography.
+        - Add a use annotation explaining what the source supported and what uncertainty remains.
+        - Do not invent missing DOI, author, year, publisher, or publication metadata. Mark incomplete metadata for verification.
+        - For MCP-capable clients, prefer `record_citable_source` and `annotate_bibliography_entry`.
+        """
+    }
 
     func bootstrap() async {
         do {
@@ -131,7 +140,7 @@ final class WorkbenchStore {
             case .hay:
                 body = "# \(title)\n\n## Raw Material\n\n## Extraction Goal\n\n## Output Preference\nPrefer durable Gold, typed prompts, workflows, profile updates, directory notes, or review proposals depending on risk.\n"
             case .bibliography:
-                body = "# \(title)\n\n## Citation Metadata\n- bibtex_key:\n- entry_type:\n- authors:\n- year:\n- doi:\n- url:\n- source:\n\n## Agent Notes\n\n## Raw BibTeX\n```bibtex\n\n```\n"
+                body = "# \(title)\n\n## Citation Metadata\n- bibtex_key:\n- entry_type:\n- authors:\n- year:\n- doi:\n- url:\n- source_path:\n- source:\n\n## Agent Notes\n\n## Use Annotations\n\n## Raw BibTeX\n```bibtex\n\n```\n"
             case .plugin:
                 body = "# \(title)\n\n## Purpose\n\n## Contents\n\n## Install Policy\nNo executable code. Import approved Markdown assets only.\n"
             case .skill:
@@ -155,6 +164,7 @@ final class WorkbenchStore {
         let sections = [
             "# Tremotino Context Pack",
             "Client: \(client)",
+            "## Source Use Contract\n\(citableSourceRule)",
             "## Pack\n\(pack.body)",
             "## Operating Profile\n\(profiles.map { $0.body }.joined(separator: "\n\n---\n\n"))",
             "## Prompt Pack\n\(promptMatches.map { $0.body }.joined(separator: "\n\n---\n\n"))",
@@ -172,6 +182,8 @@ final class WorkbenchStore {
         You are running from Tremotino using an assembled context pack.
 
         Use the following context to propose or perform scoped work inside the Tremotino vault. Keep edits limited to typed vault objects unless a workflow explicitly grants another writable path.
+
+        \(citableSourceRule)
 
         \(assembleContextPack(contextPack, client: client))
         """
@@ -211,6 +223,8 @@ final class WorkbenchStore {
 
         Review the Tremotino bibliography library as first-class research memory. Identify duplicate keys, missing DOI/URL/year/author metadata, citation-integrity risks, and entries that should be linked to Gold or research projects.
 
+        \(citableSourceRule)
+
         Write outputs only inside the Tremotino vault. Prefer Review proposals for uncertain durable claims.
 
         Bibliography entries:
@@ -242,6 +256,8 @@ final class WorkbenchStore {
         Spin hay into gold: inspect the provided files or folders as disordered raw material, extract durable signal, and write the refined result into the Tremotino vault.
 
         Treat source paths as read-only raw material. Do not edit, delete, move, rename, or reformat source files. Write outputs only inside the Tremotino vault.
+
+        \(citableSourceRule)
 
         Source paths:
         \(expandedSources.map { "- \($0)" }.joined(separator: "\n"))
@@ -298,6 +314,8 @@ final class WorkbenchStore {
         Task:
         \(codexInstruction(for: document))
 
+        \(citableSourceRule)
+
         Content:
         \(document.body)
         """
@@ -338,6 +356,8 @@ final class WorkbenchStore {
         You are running from Tremotino.
 
         Convert this raw inbox item into a useful typed Tremotino object. Prefer `gold`, `workflow`, `prompt`, `profile`, or `directory` depending on the content. Edit only the Tremotino vault.
+
+        \(citableSourceRule)
 
         Inbox item:
         \(note.title)
@@ -553,7 +573,7 @@ final class WorkbenchStore {
 
     private func seedProjects() {
         projects = [
-            WorkbenchProject(id: UUID(), title: "Research Moat Hub", kind: .researchMoat, path: "~/Documents/Tremotino/Vault/Projects/research-moat-hub.md", summary: "Second-brain layer for sources, claims, reusable arguments, people, institutions, and project evidence.", updatedAt: Date()),
+            WorkbenchProject(id: UUID(), title: "Research Moat Hub", kind: .researchMoat, path: "~/Documents/Tremotino/Vault/Library/Projects/research-moat-hub.md", summary: "Second-brain layer for sources, claims, reusable arguments, people, institutions, and project evidence.", updatedAt: Date()),
             WorkbenchProject(id: UUID(), title: "Grant & Applications", kind: .grantApplication, path: "~/Documents/Career General", summary: "Drafting, application answers, public positioning, and source links.", updatedAt: Date()),
             WorkbenchProject(id: UUID(), title: "Land Explorer", kind: .localApp, path: "~/Documents/GitHub/land_explorer", summary: "Platform rebuilds, validation, runtime assets, and demo readiness.", updatedAt: Date()),
             WorkbenchProject(id: UUID(), title: "Research Packs", kind: .researchReport, path: "~/Downloads/Monti Prenestini ricerca 4", summary: "Source compaction, report packages, and provenance checks.", updatedAt: Date())

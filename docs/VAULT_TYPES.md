@@ -2,6 +2,19 @@
 
 Tremotino keeps private operating context in a local Markdown vault. The public repository contains only code and generic templates.
 
+## Layout
+
+The vault root is intentionally simple:
+
+```text
+Vault/
+  Library/   durable portable agent context
+  Work/      inbox, hay, review queue, Codex jobs
+  System/    runbooks and local operating files
+```
+
+Most typed objects live under `Library/`. Volatile work artifacts live under `Work/`.
+
 ## Types
 
 - `workflow`: reusable agent workflow with inputs, steps, writable paths, and expected output.
@@ -37,8 +50,8 @@ Jobs are private vault data and should not be committed to this repository.
 Stills use local media files plus Markdown sidecars:
 
 ```text
-Vault/Stills/example.md
-Vault/Stills/Files/example.png
+Vault/Library/Stills/example.md
+Vault/Library/Stills/Files/example.png
 ```
 
 Hay ingestion jobs may reference source files or folders outside the vault. Those paths are treated as read-only raw material by prompt policy; extracted outputs are written back into the private vault.

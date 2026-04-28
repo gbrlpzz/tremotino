@@ -7,6 +7,9 @@ struct MarkdownStore {
     func bootstrapVault() throws {
         for directory in [
             paths.vaultRoot,
+            paths.libraryRoot,
+            paths.workRoot,
+            paths.systemRoot,
             paths.inbox,
             paths.workflows,
             paths.prompts,
@@ -29,6 +32,8 @@ struct MarkdownStore {
         ] {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }
+        try migrateLegacyLayoutIfNeeded()
+        try syncCrossAgentSkillsIfNeeded()
 
         try writeSeedIfNeeded(
             at: paths.vaultRoot.appendingPathComponent("README.md"),
@@ -60,7 +65,7 @@ struct MarkdownStore {
 
             ## Relations
             - relates_to [[Projects]]
-            - relates_to [[Review Queue]]
+            - relates_to [[Review]]
             - supports [[Grant & Applications]]
             - supports [[Research Packs]]
             """
@@ -246,6 +251,12 @@ struct MarkdownStore {
 
             ## Policy
             Keep imported BibTeX entries editable as Markdown. Preserve DOI, URL, source path, notes, and the raw BibTeX block so agents can verify citation claims before using them.
+
+            ## Agent Source Rule
+            When an agent consults a citable source for drafting, research, design direction, code provenance, or factual support, it should record the source here and add a use annotation explaining what the source supported. Do not invent missing citation metadata; mark incomplete entries for verification.
+
+            ## Use Annotations
+            Add dated notes describing how a source was used, which claim or workflow it supported, and any uncertainty that remains.
 
             ## Raw BibTeX
             ```bibtex
@@ -566,12 +577,22 @@ struct MarkdownStore {
         let directory = directory(for: type)
         let files: [URL]
         if type == .skill {
-            files = try listMarkdown(in: directory) + pluginSkillMarkdownFiles()
+            files = try skillMarkdownFiles()
         } else {
             files = try listMarkdown(in: directory)
         }
-        return files.map { document(from: $0, type: type) }
-            .sorted { $0.createdAt > $1.createdAt }
+        let documents = files.map { document(from: $0, type: type) }
+        if type == .skill {
+            return deduplicatedSkills(documents).sorted { lhs, rhs in
+                let leftInstalled = lhs.path.path.contains("/External/") || lhs.path.path.contains("/Packs/")
+                let rightInstalled = rhs.path.path.contains("/External/") || rhs.path.path.contains("/Packs/")
+                if leftInstalled != rightInstalled {
+                    return leftInstalled && !rightInstalled
+                }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+        }
+        return documents.sorted { $0.createdAt > $1.createdAt }
     }
 
     func saveDocument(_ document: VaultDocument) throws {
@@ -656,7 +677,7 @@ struct MarkdownStore {
     private func listMarkdown(in directory: URL) throws -> [URL] {
         guard fileManager.fileExists(atPath: directory.path) else { return [] }
         return try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.creationDateKey])
-            .filter { $0.pathExtension == "md" }
+            .filter { $0.pathExtension == "md" && $0.lastPathComponent != "skill-template.md" }
     }
 
     private func allMarkdownFiles(in directory: URL) throws -> [URL] {
@@ -664,11 +685,150 @@ struct MarkdownStore {
         return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "md" }
     }
 
-    private func pluginSkillMarkdownFiles() throws -> [URL] {
-        guard let enumerator = fileManager.enumerator(at: paths.plugins, includingPropertiesForKeys: nil) else { return [] }
-        return enumerator
-            .compactMap { $0 as? URL }
-            .filter { $0.lastPathComponent == "SKILL.md" }
+    private func skillMarkdownFiles() throws -> [URL] {
+        var files = try listMarkdown(in: paths.skills)
+        for root in [paths.skills, paths.plugins] {
+            guard let enumerator = fileManager.enumerator(at: root, includingPropertiesForKeys: nil) else { continue }
+            files += enumerator
+                .compactMap { $0 as? URL }
+                .filter { $0.lastPathComponent == "SKILL.md" }
+        }
+        return files.sorted { $0.path < $1.path }
+    }
+
+    private func deduplicatedSkills(_ documents: [VaultDocument]) -> [VaultDocument] {
+        var seen: Set<String> = []
+        var unique: [VaultDocument] = []
+
+        for document in documents {
+            let key = document.title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty else {
+                unique.append(document)
+                continue
+            }
+            if seen.insert(key).inserted {
+                unique.append(document)
+            }
+        }
+
+        return unique
+    }
+
+    private func migrateLegacyLayoutIfNeeded() throws {
+        let moves: [(String, URL)] = [
+            ("Inbox", paths.inbox),
+            ("Workflows", paths.workflows),
+            ("Prompts", paths.prompts),
+            ("Profile", paths.profile),
+            ("Directories", paths.directories),
+            ("Bibliography", paths.bibliography),
+            ("Skills", paths.skills),
+            ("Plugins", paths.plugins),
+            ("Design", paths.design),
+            ("Stills", paths.stills),
+            ("Context Packs", paths.contextPacks),
+            ("Hay", paths.hay),
+            ("Jobs", paths.jobs),
+            ("Projects", paths.projects),
+            ("Review Queue", paths.review),
+            ("Runbooks", paths.runbooks),
+            ("Gold", paths.gold)
+        ]
+
+        for (legacyName, destination) in moves {
+            let source = paths.vaultRoot.appendingPathComponent(legacyName)
+            guard source.path != destination.path, fileManager.fileExists(atPath: source.path) else { continue }
+            try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+            let children = try fileManager.contentsOfDirectory(at: source, includingPropertiesForKeys: nil)
+            for child in children {
+                let target = destination.appendingPathComponent(child.lastPathComponent)
+                try moveItemMergingDirectories(from: child, to: target)
+            }
+            let remaining = try fileManager.contentsOfDirectory(atPath: source.path)
+            if remaining.isEmpty {
+                try fileManager.removeItem(at: source)
+            }
+        }
+    }
+
+    private func moveItemMergingDirectories(from source: URL, to destination: URL) throws {
+        guard fileManager.fileExists(atPath: source.path) else { return }
+        var sourceIsDirectory: ObjCBool = false
+        let sourceExists = fileManager.fileExists(atPath: source.path, isDirectory: &sourceIsDirectory)
+        guard sourceExists else { return }
+
+        var destinationIsDirectory: ObjCBool = false
+        let destinationExists = fileManager.fileExists(atPath: destination.path, isDirectory: &destinationIsDirectory)
+
+        if destinationExists, sourceIsDirectory.boolValue, destinationIsDirectory.boolValue {
+            let children = try fileManager.contentsOfDirectory(at: source, includingPropertiesForKeys: nil)
+            for child in children {
+                try moveItemMergingDirectories(from: child, to: destination.appendingPathComponent(child.lastPathComponent))
+            }
+            let remaining = try fileManager.contentsOfDirectory(atPath: source.path)
+            if remaining.isEmpty {
+                try fileManager.removeItem(at: source)
+            }
+            return
+        }
+
+        if destinationExists {
+            return
+        }
+
+        try fileManager.moveItem(at: source, to: destination)
+    }
+
+    private func syncCrossAgentSkillsIfNeeded() throws {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let sources: [(String, URL)] = [
+            ("agents", home.appendingPathComponent(".agents/skills")),
+            ("codex", home.appendingPathComponent(".codex/skills"))
+        ]
+
+        for (sourceName, sourceRoot) in sources {
+            guard fileManager.fileExists(atPath: sourceRoot.path) else { continue }
+            let destinationRoot = paths.skills
+                .appendingPathComponent("External")
+                .appendingPathComponent(sourceName)
+            try fileManager.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+            let children = try fileManager.contentsOfDirectory(at: sourceRoot, includingPropertiesForKeys: nil)
+            for child in children where fileManager.fileExists(atPath: child.appendingPathComponent("SKILL.md").path) {
+                let destination = destinationRoot.appendingPathComponent(child.lastPathComponent)
+                if !fileManager.fileExists(atPath: destination.path) {
+                    try fileManager.copyItem(at: child, to: destination)
+                }
+                try writeCrossAgentSkillContextIfNeeded(
+                    at: destination.appendingPathComponent("TREMOTINO.md"),
+                    sourcePath: child.path,
+                    sourceName: sourceName
+                )
+            }
+        }
+    }
+
+    private func writeCrossAgentSkillContextIfNeeded(at url: URL, sourcePath: String, sourceName: String) throws {
+        guard !fileManager.fileExists(atPath: url.path) else { return }
+        let content = """
+        ---
+        title: Tremotino Skill Context
+        type: skill_context
+        source: \(escapeYaml(sourceName))
+        source_path: \(escapeYaml(sourcePath))
+        created_at: \(ISO8601DateFormatter().string(from: Date()))
+        ---
+
+        # Tremotino Skill Context
+
+        This is Tremotino's portable copy of a cross-agent skill.
+
+        ## Source
+        \(sourcePath)
+
+        ## Policy
+        Keep the default external skill wiring usable. Tremotino stores this copy so the skill library is portable, annotatable, and available through MCP even if a future agent client uses a different local convention.
+        """
+        try content.write(to: url, atomically: true, encoding: .utf8)
     }
 
     private func note(from url: URL) -> WorkbenchNote {
@@ -755,6 +915,8 @@ struct MarkdownStore {
         ## Agent Notes
         - Verify citation metadata before using in a paper, report, or grant.
         - Preserve uncertainty if source metadata is incomplete.
+
+        ## Use Annotations
 
         ## Raw BibTeX
         ```bibtex

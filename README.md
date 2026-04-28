@@ -8,15 +8,18 @@ It is designed as a personal second-brain foundation and central agent context s
 
 This repository contains an early SwiftUI prototype. It includes:
 
-- A native macOS app organized around Capture, Hay to Gold, Review, Agent Hub, and Settings.
+- A native macOS app organized around Capture, Hay to Gold, Skills, Context, Review, and Settings.
 - A Markdown-first vault stored outside the repository by default at `~/Documents/Tremotino/Vault`.
+- A simple vault layout: `Library/` for portable agent memory, `Work/` for inbox/hay/jobs/review, and `System/` for runbooks.
 - A disposable generated index stored outside the repository at `~/Library/Application Support/Tremotino/`.
 - A local stdio MCP server with search, fetch, proposal, project context, and runbook tools.
 - A Codex CLI job queue for scoped `codex exec` workflows.
 - Typed Markdown vault objects for workflows, prompts, profile, directories, jobs, and gold items.
 - Agent assets for skills, curated plugin packs, `DESIGN.md` files, stills, context packs, and hay ingestion.
-- Automatic skill loading from `Skills/*.md` and any installed plugin-pack `SKILL.md` files.
+- One visible skill library loaded from `Library/Skills`, copied `~/.agents/skills` and `~/.codex/skills`, and installed pack `SKILL.md` files.
 - Native bibliography management with BibTeX import, editable Markdown reference entries, validation, and MCP tools.
+- Citable-source recording and use annotations so agents can add sources to the bibliography as they work.
+- Agent-facing skill editing through MCP, so Codex or Claude can create, update, fetch, and annotate skills in the same vault the app displays.
 - A minimal black-and-white macOS icon.
 
 ## Design principles
@@ -98,6 +101,22 @@ It exposes:
 - `list_runbooks`
 - `run_runbook_dry_run`
 - workflow, prompt, profile, directory, bibliography, skill, plugin, design, still, hay, context-pack, job, and gold tools
+- citable-source tools for recording source metadata and annotating how a source was used
+- skill editing tools for upserting skills and recording skill usage notes
+- `sync_cross_agent_skills` for copying default `~/.agents/skills` and `~/.codex/skills` into Tremotino's portable skill library
+
+## Vault layout
+
+The private vault is intentionally small at the root:
+
+```text
+Vault/
+  Library/   portable durable context, skills, prompts, bibliography, packs, gold
+  Work/      inbox, hay, review proposals, job history
+  System/    runbooks and local operating files
+```
+
+Tremotino keeps a copy of default cross-agent skills under `Library/Skills/External/` while leaving the original `~/.agents/skills` and `~/.codex/skills` wiring intact.
 
 See `docs/MCP_CLIENT_SETUP.md` for client setup notes.
 

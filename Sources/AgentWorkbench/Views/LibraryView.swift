@@ -1,16 +1,14 @@
 import SwiftUI
 
 private enum LibraryTab: String, CaseIterable, Identifiable {
-    case skills
-    case bibliography
-    case gold
     case prompts
-    case workflows
     case profile
+    case gold
+    case bibliography
+    case workflows
     case directories
     case design
     case stills
-    case plugins
     case runbooks
     case registry
 
@@ -18,16 +16,14 @@ private enum LibraryTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .skills: "Skills"
-        case .bibliography: "Bibliography"
-        case .gold: "Gold"
         case .prompts: "Prompts"
-        case .workflows: "Workflows"
         case .profile: "Profile"
+        case .gold: "Gold"
+        case .bibliography: "Bibliography"
+        case .workflows: "Workflows"
         case .directories: "Directories"
         case .design: "Design"
         case .stills: "Stills"
-        case .plugins: "Plugins"
         case .runbooks: "Runbooks"
         case .registry: "Registry"
         }
@@ -35,11 +31,11 @@ private enum LibraryTab: String, CaseIterable, Identifiable {
 }
 
 struct LibraryView: View {
-    @State private var selectedTab: LibraryTab = .skills
+    @State private var selectedTab: LibraryTab = .prompts
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HeaderView(title: "Agent Hub", subtitle: "Central context and skill management for Codex, Claude, and future agents.")
+            HeaderView(title: "Context", subtitle: "Prompts, profile, sources, workflows, and durable memory used by Tremotino agents.")
 
             HStack {
                 Picker("Agent asset", selection: $selectedTab) {
@@ -54,26 +50,22 @@ struct LibraryView: View {
             }
 
             switch selectedTab {
-            case .skills:
-                TypedDocumentsView(type: .skill, showsHeader: false)
-            case .bibliography:
-                BibliographyView(showsHeader: false)
-            case .gold:
-                TypedDocumentsView(type: .gold, showsHeader: false)
             case .prompts:
                 TypedDocumentsView(type: .prompt, showsHeader: false)
-            case .workflows:
-                TypedDocumentsView(type: .workflow, showsHeader: false)
             case .profile:
                 TypedDocumentsView(type: .profile, showsHeader: false)
+            case .gold:
+                TypedDocumentsView(type: .gold, showsHeader: false)
+            case .bibliography:
+                BibliographyView(showsHeader: false)
+            case .workflows:
+                TypedDocumentsView(type: .workflow, showsHeader: false)
             case .directories:
                 TypedDocumentsView(type: .directory, showsHeader: false)
             case .design:
                 TypedDocumentsView(type: .designMD, showsHeader: false)
             case .stills:
                 StillsView(showsHeader: false)
-            case .plugins:
-                TypedDocumentsView(type: .plugin, showsHeader: false)
             case .runbooks:
                 RunbooksView(showsHeader: false)
             case .registry:

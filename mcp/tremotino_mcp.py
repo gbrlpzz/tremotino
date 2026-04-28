@@ -11,6 +11,7 @@ import datetime as dt
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -31,24 +32,33 @@ VAULT = Path(
         os.environ.get("AGENT_WORKBENCH_VAULT", HOME / "Documents" / "Tremotino" / "Vault"),
     )
 )
-REVIEW = VAULT / "Review Queue"
-INBOX = VAULT / "Inbox"
-WORKFLOWS = VAULT / "Workflows"
-PROMPTS = VAULT / "Prompts"
-PROFILE = VAULT / "Profile"
-DIRECTORIES = VAULT / "Directories"
-BIBLIOGRAPHY = VAULT / "Bibliography"
-SKILLS = VAULT / "Skills"
-PLUGINS = VAULT / "Plugins"
-DESIGN = VAULT / "Design"
-STILLS = VAULT / "Stills"
+LIBRARY = VAULT / "Library"
+WORK = VAULT / "Work"
+SYSTEM = VAULT / "System"
+REVIEW = WORK / "Review"
+INBOX = WORK / "Inbox"
+WORKFLOWS = LIBRARY / "Workflows"
+PROMPTS = LIBRARY / "Prompts"
+PROFILE = LIBRARY / "Profile"
+DIRECTORIES = LIBRARY / "Directories"
+BIBLIOGRAPHY = LIBRARY / "Bibliography"
+SKILLS = LIBRARY / "Skills"
+PLUGINS = LIBRARY / "Packs"
+DESIGN = LIBRARY / "Design"
+STILLS = LIBRARY / "Stills"
 STILL_FILES = STILLS / "Files"
-CONTEXT_PACKS = VAULT / "Context Packs"
-HAY = VAULT / "Hay"
-JOBS = VAULT / "Jobs"
-PROJECTS = VAULT / "Projects"
-RUNBOOKS = VAULT / "Runbooks"
-GOLD = VAULT / "Gold"
+CONTEXT_PACKS = LIBRARY / "Context Packs"
+HAY = WORK / "Hay"
+JOBS = WORK / "Jobs"
+PROJECTS = LIBRARY / "Projects"
+RUNBOOKS = SYSTEM / "Runbooks"
+GOLD = LIBRARY / "Gold"
+
+CITABLE_SOURCE_RULE = """Citable source rule:
+- When you consult a citable source for drafting, research, design direction, code provenance, or factual support, record it in Tremotino Bibliography.
+- Add a use annotation explaining what the source supported and what uncertainty remains.
+- Do not invent missing DOI, author, year, publisher, or publication metadata. Mark incomplete metadata for verification.
+- For MCP-capable clients, prefer record_citable_source and annotate_bibliography_entry."""
 
 
 TOOLS = [
@@ -145,6 +155,47 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
     },
     {
+        "name": "record_citable_source",
+        "description": "Record or update a citable source in Tremotino bibliography and annotate how the agent used it.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "authors": {"type": ["string", "array"], "items": {"type": "string"}},
+                "year": {"type": "string"},
+                "entry_type": {"type": "string"},
+                "source_type": {"type": "string"},
+                "bibtex_key": {"type": "string"},
+                "doi": {"type": "string"},
+                "url": {"type": "string"},
+                "journal": {"type": "string"},
+                "publisher": {"type": "string"},
+                "source_path": {"type": "string"},
+                "bibtex": {"type": "string"},
+                "used_for": {"type": "string"},
+                "annotation": {"type": "string"},
+                "confidence": {"type": "string"},
+                "agent": {"type": "string"},
+            },
+            "required": ["title"],
+        },
+    },
+    {
+        "name": "annotate_bibliography_entry",
+        "description": "Append a use annotation to an existing bibliography entry.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "used_for": {"type": "string"},
+                "annotation": {"type": "string"},
+                "confidence": {"type": "string"},
+                "agent": {"type": "string"},
+            },
+            "required": ["id", "annotation"],
+        },
+    },
+    {
         "name": "import_bibtex",
         "description": "Import BibTeX content into native Tremotino bibliography Markdown entries.",
         "inputSchema": {
@@ -216,9 +267,49 @@ TOOLS = [
     },
     {"name": "list_skills", "description": "List local agent skills with lightweight metadata.", "inputSchema": {"type": "object", "properties": {}}},
     {
+        "name": "sync_cross_agent_skills",
+        "description": "Copy default ~/.agents/skills and ~/.codex/skills into Tremotino's portable skill library without overwriting existing copies.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "get_skill",
         "description": "Fetch a skill by title or path.",
-        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "include_references": {"type": "boolean"},
+            },
+            "required": ["id"],
+        },
+    },
+    {
+        "name": "upsert_skill",
+        "description": "Create or update an installed Tremotino skill Markdown file.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "title": {"type": "string"},
+                "content": {"type": "string"},
+                "source": {"type": "string"},
+            },
+            "required": ["content"],
+        },
+    },
+    {
+        "name": "annotate_skill_usage",
+        "description": "Append a dated usage note to an installed skill.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "used_for": {"type": "string"},
+                "note": {"type": "string"},
+                "agent": {"type": "string"},
+            },
+            "required": ["id", "note"],
+        },
     },
     {"name": "list_plugins", "description": "List curated local plugin packs.", "inputSchema": {"type": "object", "properties": {}}},
     {
@@ -287,6 +378,9 @@ TOOLS = [
 def ensure_dirs() -> None:
     for directory in (
         VAULT,
+        LIBRARY,
+        WORK,
+        SYSTEM,
         REVIEW,
         INBOX,
         WORKFLOWS,
@@ -307,6 +401,108 @@ def ensure_dirs() -> None:
         GOLD,
     ):
         directory.mkdir(parents=True, exist_ok=True)
+
+
+def bootstrap_layout() -> None:
+    ensure_dirs()
+    migrate_legacy_layout()
+    sync_cross_agent_skills()
+
+
+def merge_move(source: Path, destination: Path) -> None:
+    if not source.exists():
+        return
+    if destination.exists() and source.is_dir() and destination.is_dir():
+        for child in source.iterdir():
+            merge_move(child, destination / child.name)
+        try:
+            source.rmdir()
+        except OSError:
+            pass
+        return
+    if destination.exists():
+        return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(source), str(destination))
+
+
+def migrate_legacy_layout() -> None:
+    moves = {
+        "Inbox": INBOX,
+        "Workflows": WORKFLOWS,
+        "Prompts": PROMPTS,
+        "Profile": PROFILE,
+        "Directories": DIRECTORIES,
+        "Bibliography": BIBLIOGRAPHY,
+        "Skills": SKILLS,
+        "Plugins": PLUGINS,
+        "Design": DESIGN,
+        "Stills": STILLS,
+        "Context Packs": CONTEXT_PACKS,
+        "Hay": HAY,
+        "Jobs": JOBS,
+        "Projects": PROJECTS,
+        "Review Queue": REVIEW,
+        "Runbooks": RUNBOOKS,
+        "Gold": GOLD,
+    }
+    for legacy_name, destination in moves.items():
+        source = VAULT / legacy_name
+        if source == destination or not source.exists():
+            continue
+        destination.mkdir(parents=True, exist_ok=True)
+        for child in list(source.iterdir()):
+            merge_move(child, destination / child.name)
+        try:
+            source.rmdir()
+        except OSError:
+            pass
+
+
+def sync_cross_agent_skills() -> dict[str, Any]:
+    ensure_dirs()
+    copied: list[str] = []
+    sources = {
+        "agents": HOME / ".agents" / "skills",
+        "codex": HOME / ".codex" / "skills",
+    }
+    for source_name, source_root in sources.items():
+        if not source_root.exists():
+            continue
+        destination_root = SKILLS / "External" / source_name
+        destination_root.mkdir(parents=True, exist_ok=True)
+        for child in sorted(source_root.iterdir()):
+            if not child.is_dir() or not (child / "SKILL.md").exists():
+                continue
+            destination = destination_root / child.name
+            if not destination.exists():
+                shutil.copytree(child, destination)
+                copied.append(str(destination))
+            context = destination / "TREMOTINO.md"
+            if not context.exists():
+                context.write_text(f"""---
+title: Tremotino Skill Context
+type: skill_context
+source: {source_name}
+source_path: "{child}"
+created_at: {dt.datetime.now(dt.timezone.utc).isoformat()}
+---
+
+# Tremotino Skill Context
+
+This is Tremotino's portable copy of a cross-agent skill.
+
+## Source
+{child}
+
+## Policy
+Keep the default external skill wiring usable. Tremotino stores this copy so the skill library is portable, annotatable, and available through MCP even if a future agent client uses a different local convention.
+""", encoding="utf-8")
+    return {"copied": copied, "sources": {key: str(value) for key, value in sources.items()}}
+
+
+def sync_cross_agent_skills_tool(_: dict[str, Any]) -> dict[str, Any]:
+    return text_response(json.dumps(sync_cross_agent_skills(), indent=2))
 
 
 def slugify(value: str) -> str:
@@ -354,6 +550,8 @@ def list_docs(directory: Path) -> list[dict[str, str]]:
         return []
     items = []
     for path in sorted(directory.glob("*.md")):
+        if path.name == "skill-template.md":
+            continue
         content = path.read_text(encoding="utf-8", errors="ignore")
         items.append({
             "title": title_for(path, content),
@@ -376,17 +574,174 @@ def list_still_docs() -> list[dict[str, str]]:
 
 
 def list_skill_docs() -> list[dict[str, str]]:
-    items = list_docs(SKILLS)
+    items: list[dict[str, str]] = []
+    for root in (SKILLS, PLUGINS):
+        if root.exists():
+            for path in sorted(root.rglob("SKILL.md")):
+                content = path.read_text(encoding="utf-8", errors="ignore")
+                items.append({
+                    "title": title_for(path, content),
+                    "type": "skill",
+                    "path": str(path),
+                    "source": skill_source_label(path),
+                    "excerpt": re.sub(r"\s+", " ", body_for(content))[:260],
+                })
+    for item in list_docs(SKILLS):
+        item["source"] = "local"
+        items.append(item)
+    seen: set[str] = set()
+    unique: list[dict[str, str]] = []
+    for item in items:
+        key = item["title"].strip().lower()
+        if key and key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return sorted(unique, key=lambda item: (skill_source_priority(item.get("source", "")), item["title"].lower()))
+
+
+def skill_source_priority(source: str) -> int:
+    if source.startswith("external:agents"):
+        return 0
+    if source.startswith("external:codex"):
+        return 1
+    if source.startswith("pack:"):
+        return 2
+    return 3
+
+
+def skill_source_label(path: Path) -> str:
+    try:
+        relative = path.relative_to(SKILLS)
+        if relative.parts[:1] == ("External",) and len(relative.parts) > 1:
+            return f"external:{relative.parts[1]}"
+        return "local"
+    except ValueError:
+        pass
+    try:
+        relative = path.relative_to(PLUGINS)
+        return f"pack:{relative.parts[0]}" if relative.parts else "pack"
+    except ValueError:
+        return "unknown"
+
+
+def skill_paths() -> list[Path]:
+    paths: list[Path] = []
+    if SKILLS.exists():
+        paths.extend(sorted(SKILLS.rglob("SKILL.md")))
+        paths.extend(sorted(path for path in SKILLS.glob("*.md") if path.name != "skill-template.md"))
     if PLUGINS.exists():
-        for path in sorted(PLUGINS.rglob("SKILL.md")):
-            content = path.read_text(encoding="utf-8", errors="ignore")
-            items.append({
-                "title": title_for(path, content),
-                "type": "skill",
-                "path": str(path),
-                "excerpt": re.sub(r"\s+", " ", body_for(content))[:260],
-            })
-    return items
+        paths.extend(sorted(PLUGINS.rglob("SKILL.md")))
+    seen: set[str] = set()
+    unique: list[Path] = []
+    for path in paths:
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        key = title_for(path, content).strip().lower()
+        if key and key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return sorted(unique, key=lambda path: (skill_source_priority(skill_source_label(path)), title_for(path).lower()))
+
+
+def fetch_skill_document(identifier: str, include_references: bool = False) -> str:
+    candidate = Path(identifier).expanduser()
+    if candidate.exists() and candidate.is_file():
+        content = candidate.read_text(encoding="utf-8", errors="ignore")
+        return append_skill_companions(candidate, content) if include_references else content
+
+    lowered = identifier.lower()
+    for path in skill_paths():
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        if lowered in title_for(path, content).lower() or lowered in str(path).lower():
+            return append_skill_companions(path, content) if include_references else content
+    return f"No skill found for {identifier}"
+
+
+def append_skill_companions(path: Path, content: str) -> str:
+    base = path.parent
+    companions = []
+    for pattern in ("references/*.md", "assets/*.md", "templates/*.md"):
+        companions.extend(sorted(base.glob(pattern)))
+    if not companions:
+        return content
+    companion_list = "\n".join(f"- {item}" for item in companions[:40])
+    return f"{content}\n\n---\n\n## Tremotino Companion Files\n{companion_list}"
+
+
+def find_skill_path(identifier: str) -> Path | None:
+    candidate = Path(identifier).expanduser()
+    if candidate.exists() and candidate.is_file():
+        return candidate
+    lowered = identifier.lower()
+    for path in skill_paths():
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        if lowered in title_for(path, content).lower() or lowered in str(path).lower():
+            return path
+    return None
+
+
+def skill_markdown(title: str, content: str, source: str) -> str:
+    if content.lstrip().startswith("---"):
+        return content
+    safe_title = title.replace('"', '\\"')
+    safe_source = source.replace('"', '\\"')
+    return f"""---
+title: "{safe_title}"
+type: skill
+source: "{safe_source}"
+created_at: {dt.datetime.now(dt.timezone.utc).isoformat()}
+---
+
+{content}
+"""
+
+
+def upsert_skill(args: dict[str, Any]) -> dict[str, Any]:
+    ensure_dirs()
+    identifier = str(args.get("id", "")).strip()
+    content = str(args.get("content", "")).strip()
+    if not content:
+        return text_response(json.dumps({"error": "content is required"}, indent=2))
+    title = str(args.get("title", "")).strip()
+    path = find_skill_path(identifier) if identifier else None
+    created = path is None
+    if path is None:
+        if not title:
+            title = title_for(Path("skill.md"), content)
+        path = SKILLS / "Custom" / slugify(title) / "SKILL.md"
+    if not title:
+        title = title_for(path, content)
+    source = str(args.get("source", "mcp-agent")).strip() or "mcp-agent"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(skill_markdown(title, content, source), encoding="utf-8")
+    return text_response(json.dumps({
+        "path": str(path),
+        "created": created,
+        "title": title,
+    }, indent=2))
+
+
+def annotate_skill_usage(args: dict[str, Any]) -> dict[str, Any]:
+    identifier = str(args.get("id", ""))
+    path = find_skill_path(identifier)
+    if path is None:
+        return text_response(json.dumps({"error": f"No skill found for {identifier}"}, indent=2))
+    content = path.read_text(encoding="utf-8", errors="ignore")
+    used_for = str(args.get("used_for", "")).strip()
+    note = str(args.get("note", "")).strip()
+    agent = str(args.get("agent", "mcp-agent")).strip() or "mcp-agent"
+    timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
+    block = f"- {timestamp}\n  - agent: {agent}"
+    if used_for:
+        block += f"\n  - used_for: {used_for}"
+    block += f"\n  - note: {note}"
+    if "## Tremotino Usage Notes" in content:
+        content = content.replace("## Tremotino Usage Notes", f"## Tremotino Usage Notes\n{block}\n", 1)
+    else:
+        content = f"{content.rstrip()}\n\n## Tremotino Usage Notes\n{block}\n"
+    path.write_text(content, encoding="utf-8")
+    return text_response(json.dumps({"path": str(path), "annotated": True}, indent=2))
 
 
 def inline_value(content: str, key: str) -> str | None:
@@ -612,6 +967,7 @@ def write_bibliography_entry(entry: dict[str, Any], source: str) -> Path:
     year = str(fields.get("year") or fields.get("date") or "")
     doi = str(fields.get("doi") or "")
     url = str(fields.get("url") or "")
+    source_path = str(fields.get("source_path") or "")
     raw = str(entry.get("raw") or render_bibtex_entry(entry_type, key, fields))
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     path = BIBLIOGRAPHY / f"{stamp}-{slugify(key or title)}.md"
@@ -623,6 +979,7 @@ def write_bibliography_entry(entry: dict[str, Any], source: str) -> Path:
         "year": year,
         "doi": doi,
         "url": url,
+        "source_path": source_path,
         "source": source,
     }.items()}
     body = f"""---
@@ -634,6 +991,7 @@ authors: "{safe['authors']}"
 year: "{safe['year']}"
 doi: "{safe['doi']}"
 url: "{safe['url']}"
+source_path: "{safe['source_path']}"
 source: "{safe['source']}"
 created_at: {dt.datetime.now(dt.timezone.utc).isoformat()}
 ---
@@ -647,11 +1005,14 @@ created_at: {dt.datetime.now(dt.timezone.utc).isoformat()}
 - year: {year}
 - doi: {doi}
 - url: {url}
+- source_path: {source_path}
 - source: {source}
 
 ## Agent Notes
 - Verify citation metadata before using in a paper, report, or grant.
 - Preserve uncertainty if source metadata is incomplete.
+
+## Use Annotations
 
 ## Raw BibTeX
 ```bibtex
@@ -668,6 +1029,164 @@ def list_bibliography(_: dict[str, Any]) -> dict[str, Any]:
 
 def get_bibliography_entry(args: dict[str, Any]) -> dict[str, Any]:
     return text_response(fetch_from(BIBLIOGRAPHY, str(args.get("id", ""))))
+
+
+def normalize_identifier(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    text = re.sub(r"^https?://(dx\.)?doi\.org/", "", text)
+    text = re.sub(r"^doi:\s*", "", text)
+    text = re.sub(r"https?://", "", text)
+    return text.rstrip("/")
+
+
+def bibliography_field(content: str, key: str) -> str:
+    return frontmatter_value(content, key) or inline_value(content, key) or ""
+
+
+def bibliography_paths() -> list[Path]:
+    return sorted(BIBLIOGRAPHY.glob("*.md")) if BIBLIOGRAPHY.exists() else []
+
+
+def find_bibliography_match(fields: dict[str, Any]) -> tuple[Path | None, str]:
+    identifiers = {
+        "doi": normalize_identifier(fields.get("doi")),
+        "url": normalize_identifier(fields.get("url")),
+        "bibtex_key": normalize_identifier(fields.get("bibtex_key") or fields.get("key")),
+        "title": normalize_identifier(fields.get("title")),
+    }
+    for path in bibliography_paths():
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        existing = {
+            "doi": normalize_identifier(bibliography_field(content, "doi")),
+            "url": normalize_identifier(bibliography_field(content, "url")),
+            "bibtex_key": normalize_identifier(bibliography_field(content, "bibtex_key")),
+            "title": normalize_identifier(title_for(path, content)),
+        }
+        for key in ("doi", "url", "bibtex_key"):
+            if identifiers[key] and existing[key] and identifiers[key] == existing[key]:
+                return path, key
+        if identifiers["title"] and existing["title"] and identifiers["title"] == existing["title"]:
+            return path, "title"
+    return None, ""
+
+
+def find_bibliography_path(identifier: str) -> Path | None:
+    candidate = Path(identifier).expanduser()
+    if candidate.exists() and candidate.is_file():
+        return candidate
+    lowered = identifier.lower()
+    for path in bibliography_paths():
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        values = [
+            title_for(path, content),
+            str(path),
+            bibliography_field(content, "bibtex_key"),
+            bibliography_field(content, "doi"),
+            bibliography_field(content, "url"),
+        ]
+        if any(lowered in value.lower() for value in values if value):
+            return path
+    return None
+
+
+def authors_value(value: Any) -> str:
+    if isinstance(value, list):
+        return " and ".join(str(item).strip() for item in value if str(item).strip())
+    return str(value or "").strip()
+
+
+def source_entry_from_args(args: dict[str, Any]) -> dict[str, Any]:
+    bibtex = str(args.get("bibtex", "")).strip()
+    if bibtex:
+        parsed = parse_bibtex_entries(bibtex)
+        if parsed:
+            return parsed[0]
+
+    title = str(args.get("title", "Untitled Reference")).strip()
+    year = str(args.get("year", "")).strip()
+    author_parts = authors_value(args.get("authors")).split()
+    title_parts = title.split()
+    key_parts = [
+        author_parts[-1] if author_parts else "",
+        year,
+        title_parts[0] if title_parts else "source",
+    ]
+    key = str(args.get("bibtex_key", "")).strip() or slugify("-".join(part for part in key_parts if part))
+    entry_type = str(args.get("entry_type") or args.get("source_type") or "misc").strip().lower()
+    entry_type = re.sub(r"[^a-z0-9_-]+", "", entry_type) or "misc"
+    fields = {
+        "title": title,
+        "author": authors_value(args.get("authors")),
+        "year": year,
+        "doi": str(args.get("doi", "")).strip(),
+        "url": str(args.get("url", "")).strip(),
+        "journal": str(args.get("journal", "")).strip(),
+        "publisher": str(args.get("publisher", "")).strip(),
+        "source_path": str(args.get("source_path", "")).strip(),
+    }
+    fields = {key_: value for key_, value in fields.items() if value}
+    return {
+        "type": entry_type,
+        "key": key,
+        "fields": fields,
+        "raw": render_bibtex_entry(entry_type, key, fields),
+    }
+
+
+def append_bibliography_annotation(path: Path, args: dict[str, Any]) -> None:
+    content = path.read_text(encoding="utf-8", errors="ignore")
+    used_for = str(args.get("used_for", "")).strip()
+    annotation = str(args.get("annotation", "")).strip()
+    confidence = str(args.get("confidence", "")).strip()
+    agent = str(args.get("agent", "mcp-agent")).strip()
+    timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
+    lines = [
+        f"- {timestamp}",
+        f"  - agent: {agent}",
+    ]
+    if used_for:
+        lines.append(f"  - used_for: {used_for}")
+    if annotation:
+        lines.append(f"  - annotation: {annotation}")
+    if confidence:
+        lines.append(f"  - confidence: {confidence}")
+    block = "\n".join(lines)
+    if "## Use Annotations" in content:
+        content = content.replace("## Use Annotations", f"## Use Annotations\n{block}\n", 1)
+    else:
+        insertion = f"\n\n## Use Annotations\n{block}\n"
+        if "## Raw BibTeX" in content:
+            content = content.replace("## Raw BibTeX", f"{insertion}\n## Raw BibTeX", 1)
+        else:
+            content += insertion
+    path.write_text(content, encoding="utf-8")
+
+
+def record_citable_source(args: dict[str, Any]) -> dict[str, Any]:
+    entry = source_entry_from_args(args)
+    fields = dict(entry.get("fields", {}))
+    fields["bibtex_key"] = entry.get("key", "")
+    match, matched_by = find_bibliography_match(fields)
+    created = match is None
+    path = match
+    if path is None:
+        source = str(args.get("source_path") or args.get("url") or args.get("agent") or "mcp-citable-source")
+        path = write_bibliography_entry(entry, source)
+    append_bibliography_annotation(path, args)
+    return text_response(json.dumps({
+        "path": str(path),
+        "created": created,
+        "matched_by": matched_by or None,
+    }, indent=2))
+
+
+def annotate_bibliography_entry(args: dict[str, Any]) -> dict[str, Any]:
+    identifier = str(args.get("id", ""))
+    path = find_bibliography_path(identifier)
+    if path is None:
+        return text_response(json.dumps({"error": f"No bibliography entry found for {identifier}"}, indent=2))
+    append_bibliography_annotation(path, args)
+    return text_response(json.dumps({"path": str(path), "annotated": True}, indent=2))
 
 
 def import_bibtex(args: dict[str, Any]) -> dict[str, Any]:
@@ -707,6 +1226,8 @@ def create_bibliography_review_job(args: dict[str, Any]) -> dict[str, Any]:
 
 Treat the bibliography library as first-class research memory. Do not invent metadata. Check duplicate keys, missing DOI/URL/year/author fields, citation integrity, and links to Gold or project context.
 
+{CITABLE_SOURCE_RULE}
+
 Goal:
 {goal}
 
@@ -731,6 +1252,8 @@ def assemble_context(args: dict[str, Any]) -> dict[str, Any]:
     sections = [
         "# Tremotino Context Bundle",
         f"Task: {task}",
+        "## Source Use Contract",
+        CITABLE_SOURCE_RULE,
         "## Operating Profile",
         get_operating_profile({})["content"][0]["text"],
         "## Prompt Pack",
@@ -751,6 +1274,8 @@ def create_codex_job(args: dict[str, Any]) -> dict[str, Any]:
     ensure_dirs()
     title = str(args.get("title", "Untitled Codex Job"))
     prompt = str(args.get("prompt", ""))
+    if CITABLE_SOURCE_RULE not in prompt:
+        prompt = f"{CITABLE_SOURCE_RULE}\n\n{prompt}"
     workflow = str(args.get("workflow", "manual"))
     working_directory = str(args.get("working_directory", VAULT))
     writable_paths = args.get("writable_paths", [str(VAULT)])
@@ -841,10 +1366,8 @@ def list_skills(_: dict[str, Any]) -> dict[str, Any]:
 
 def get_skill(args: dict[str, Any]) -> dict[str, Any]:
     identifier = str(args.get("id", ""))
-    primary = fetch_from(SKILLS, identifier)
-    if not primary.startswith("No document found"):
-        return text_response(primary)
-    return text_response(fetch_from(PLUGINS, identifier))
+    include_references = bool(args.get("include_references", False))
+    return text_response(fetch_skill_document(identifier, include_references=include_references))
 
 
 def list_plugins(_: dict[str, Any]) -> dict[str, Any]:
@@ -884,6 +1407,8 @@ def assemble_context_pack(args: dict[str, Any]) -> dict[str, Any]:
         "# Tremotino Context Pack",
         f"Client: {client}",
         f"Task: {task}",
+        "## Source Use Contract",
+        CITABLE_SOURCE_RULE,
         "## Pack Definition",
         fetch_from(CONTEXT_PACKS, pack_id),
         "## Operating Profile",
@@ -994,6 +1519,8 @@ CALLS = {
     "list_directories": list_directories,
     "list_bibliography": list_bibliography,
     "get_bibliography_entry": get_bibliography_entry,
+    "record_citable_source": record_citable_source,
+    "annotate_bibliography_entry": annotate_bibliography_entry,
     "import_bibtex": import_bibtex,
     "validate_bibliography": validate_bibliography,
     "create_bibliography_review_job": create_bibliography_review_job,
@@ -1003,7 +1530,10 @@ CALLS = {
     "get_codex_job": get_codex_job,
     "propose_gold": propose_gold,
     "list_skills": list_skills,
+    "sync_cross_agent_skills": sync_cross_agent_skills_tool,
     "get_skill": get_skill,
+    "upsert_skill": upsert_skill,
+    "annotate_skill_usage": annotate_skill_usage,
     "list_plugins": list_plugins,
     "get_plugin": get_plugin,
     "list_designs": list_designs,
@@ -1024,6 +1554,7 @@ def handle(message: dict[str, Any]) -> dict[str, Any] | None:
     message_id = message.get("id")
 
     if method == "initialize":
+        bootstrap_layout()
         return {
             "jsonrpc": "2.0",
             "id": message_id,
