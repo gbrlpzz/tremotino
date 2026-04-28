@@ -65,6 +65,12 @@ Verify the Codex-facing MCP path:
 ./script/test_codex_mcp.sh
 ```
 
+Back up the private vault to Git:
+
+```sh
+TREMOTINO_VAULT_REMOTE=git@github.com:gbrlpzz/tremotino-vault.git ./script/backup_vault.sh "Tremotino vault snapshot"
+```
+
 ## MCP server
 
 The local MCP server is at:
@@ -100,6 +106,8 @@ Hay ingestion jobs take selected files or folders as raw source material, instru
 ## Data policy
 
 The repository is code-only. Personal vault contents, generated indexes, local SQLite files, and workflow data should remain outside git. The default vault path is intentionally outside the checkout.
+
+The private vault can have its own separate Git history and private remote. Use the Settings backup controls or `script/backup_vault.sh`; do not commit vault contents into this public source repository.
 
 ## License
 

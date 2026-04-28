@@ -448,6 +448,7 @@ def list_runbooks(_: dict[str, Any]) -> dict[str, Any]:
         {"id": "rebuild-index", "title": "Rebuild Index", "dry_run": "tremotino rebuild-index"},
         {"id": "scan-projects", "title": "Scan Known Projects", "dry_run": "tremotino scan-projects --dry-run"},
         {"id": "registry-refresh", "title": "Refresh MCP Registry", "dry_run": "tremotino registry-refresh"},
+        {"id": "backup-vault", "title": "Backup Private Vault", "dry_run": './script/backup_vault.sh "Tremotino vault snapshot"'},
     ]
     return text_response(json.dumps(static, indent=2))
 
@@ -458,6 +459,7 @@ def run_runbook_dry_run(args: dict[str, Any]) -> dict[str, Any]:
         "rebuild-index": "tremotino rebuild-index",
         "scan-projects": "tremotino scan-projects --dry-run",
         "registry-refresh": "tremotino registry-refresh",
+        "backup-vault": './script/backup_vault.sh "Tremotino vault snapshot"',
     }
     return text_response(commands.get(runbook_id, f"Unknown runbook: {runbook_id}"))
 

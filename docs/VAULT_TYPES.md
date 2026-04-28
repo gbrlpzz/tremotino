@@ -42,3 +42,15 @@ Vault/Stills/Files/example.png
 ```
 
 Hay ingestion jobs may reference source files or folders outside the vault. Those paths are treated as read-only raw material by prompt policy; extracted outputs are written back into the private vault.
+
+## Private Git Backup
+
+The vault is allowed to be a separate private Git repository. This is intentionally distinct from the public Tremotino source repository.
+
+Use the macOS Settings backup controls or:
+
+```sh
+TREMOTINO_VAULT_REMOTE=git@github.com:gbrlpzz/tremotino-vault.git ./script/backup_vault.sh "Tremotino vault snapshot"
+```
+
+Generated indexes remain outside the vault. The vault `.gitignore` only excludes local noise such as `.DS_Store`, temporary files, and `.tremotino-backup`.

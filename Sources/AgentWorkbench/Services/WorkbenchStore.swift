@@ -386,28 +386,108 @@ final class WorkbenchStore {
 
     func initializeVaultGitBackup() {
         do {
-            let ignore = paths.vaultRoot.appendingPathComponent(".gitignore")
-            if !FileManager.default.fileExists(atPath: ignore.path) {
-                try """
-                .DS_Store
-                *.tmp
-                """.write(to: ignore, atomically: true, encoding: .utf8)
-            }
-
-            guard !FileManager.default.fileExists(atPath: paths.vaultRoot.appendingPathComponent(".git").path) else {
-                statusMessage = "Vault Git backup already initialized"
-                return
-            }
-
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            process.arguments = ["init"]
-            process.currentDirectoryURL = paths.vaultRoot
-            try process.run()
-            process.waitUntilExit()
-            statusMessage = process.terminationStatus == 0 ? "Initialized Git backup in vault" : "Git init failed with status \(process.terminationStatus)"
+            let alreadyInitialized = FileManager.default.fileExists(atPath: paths.vaultRoot.appendingPathComponent(".git").path)
+            try ensureVaultGitBackup()
+            statusMessage = alreadyInitialized ? "Vault Git backup already initialized" : "Initialized Git backup in vault"
         } catch {
             statusMessage = "Git backup setup failed: \(error.localizedDescription)"
+        }
+    }
+
+    func configureVaultGitRemote(_ remoteURL: String) {
+        do {
+            try ensureVaultGitBackup()
+            let trimmed = remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                statusMessage = "Remote URL is empty"
+                return
+            }
+            if runGit(["remote", "get-url", "origin"]).exitCode == 0 {
+                let result = try runGitChecked(["remote", "set-url", "origin", trimmed])
+                statusMessage = result.output.isEmpty ? "Updated vault Git remote" : result.output
+            } else {
+                let result = try runGitChecked(["remote", "add", "origin", trimmed])
+                statusMessage = result.output.isEmpty ? "Added vault Git remote" : result.output
+            }
+        } catch {
+            statusMessage = "Remote setup failed: \(error.localizedDescription)"
+        }
+    }
+
+    func snapshotVaultGitBackup(message: String) {
+        do {
+            try ensureVaultGitBackup()
+            _ = try runGitChecked(["add", "-A"])
+            let status = try runGitChecked(["status", "--short"]).output
+            guard !status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                statusMessage = "Vault backup has no changes"
+                return
+            }
+            let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            let commitMessage = trimmed.isEmpty ? "Tremotino vault snapshot" : trimmed
+            _ = try runGitChecked(["commit", "-m", commitMessage])
+            statusMessage = "Committed vault backup snapshot"
+        } catch {
+            statusMessage = "Vault snapshot failed: \(error.localizedDescription)"
+        }
+    }
+
+    func pushVaultGitBackup() {
+        do {
+            try ensureVaultGitBackup()
+            let remote = runGit(["remote", "get-url", "origin"])
+            guard remote.exitCode == 0, !remote.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                statusMessage = "No private remote configured"
+                return
+            }
+            _ = try runGitChecked(["push", "-u", "origin", "main"])
+            statusMessage = "Pushed vault backup to private remote"
+        } catch {
+            statusMessage = "Vault push failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func ensureVaultGitBackup() throws {
+        let ignore = paths.vaultRoot.appendingPathComponent(".gitignore")
+        if !FileManager.default.fileExists(atPath: ignore.path) {
+            try """
+            .DS_Store
+            *.tmp
+            .tremotino-backup
+            """.write(to: ignore, atomically: true, encoding: .utf8)
+        }
+
+        if !FileManager.default.fileExists(atPath: paths.vaultRoot.appendingPathComponent(".git").path) {
+            _ = try runGitChecked(["init"])
+            _ = try runGitChecked(["branch", "-M", "main"])
+        }
+    }
+
+    private func runGitChecked(_ arguments: [String]) throws -> (exitCode: Int32, output: String) {
+        let result = runGit(arguments)
+        guard result.exitCode == 0 else {
+            throw NSError(domain: "TremotinoGit", code: Int(result.exitCode), userInfo: [NSLocalizedDescriptionKey: result.output])
+        }
+        return result
+    }
+
+    private func runGit(_ arguments: [String]) -> (exitCode: Int32, output: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        process.currentDirectoryURL = paths.vaultRoot
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        do {
+            try process.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            let output = String(data: data, encoding: .utf8) ?? ""
+            return (process.terminationStatus, output.trimmingCharacters(in: .whitespacesAndNewlines))
+        } catch {
+            return (-1, error.localizedDescription)
         }
     }
 
@@ -415,7 +495,8 @@ final class WorkbenchStore {
         runbooks = [
             Runbook(id: "rebuild-index", title: "Rebuild Index", detail: "Rebuild disposable search metadata from Markdown.", commandPreview: "tremotino rebuild-index"),
             Runbook(id: "scan-projects", title: "Scan Known Projects", detail: "Read local project folders and create review proposals.", commandPreview: "tremotino scan-projects --dry-run"),
-            Runbook(id: "registry-refresh", title: "Refresh MCP Registry", detail: "Fetch registry/spec/roadmap status without installing servers.", commandPreview: "tremotino registry-refresh")
+            Runbook(id: "registry-refresh", title: "Refresh MCP Registry", detail: "Fetch registry/spec/roadmap status without installing servers.", commandPreview: "tremotino registry-refresh"),
+            Runbook(id: "backup-vault", title: "Backup Private Vault", detail: "Commit and push the private Markdown vault to its configured Git remote.", commandPreview: "./script/backup_vault.sh \"Tremotino vault snapshot\"")
         ]
     }
 

@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(WorkbenchStore.self) private var store
+    @AppStorage("vaultBackupRemoteURL") private var vaultBackupRemoteURL = ""
+    @State private var vaultBackupMessage = "Tremotino vault snapshot"
 
     var body: some View {
         Form {
@@ -17,6 +19,29 @@ struct SettingsView: View {
                 Button("Initialize Vault Git Backup") {
                     store.initializeVaultGitBackup()
                 }
+            }
+
+            Section("Private Vault Backup") {
+                TextField("Private Git remote", text: $vaultBackupRemoteURL, prompt: Text("git@github.com:gbrlpzz/tremotino-vault.git"))
+                    .textFieldStyle(.roundedBorder)
+                TextField("Snapshot message", text: $vaultBackupMessage)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Button("Set Remote") {
+                        store.configureVaultGitRemote(vaultBackupRemoteURL)
+                    }
+                    Button("Commit Snapshot") {
+                        store.snapshotVaultGitBackup(message: vaultBackupMessage)
+                    }
+                    Button("Push Private Backup") {
+                        store.pushVaultGitBackup()
+                    }
+                }
+
+                Text("Backs up the private Markdown vault, not this public Tremotino source repository.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("MCP") {
