@@ -16,6 +16,7 @@ struct TypedDocumentsView: View {
         case .prompt: store.prompts
         case .profile: store.profiles
         case .directory: store.directories
+        case .bibliography: store.bibliographies
         case .skill: store.skills
         case .plugin: store.plugins
         case .designMD: store.designs
@@ -166,6 +167,7 @@ struct TypedDocumentsView: View {
         case .prompt: "Prompts and Style Guides"
         case .profile: "Operating Profile"
         case .directory: "Directories"
+        case .bibliography: "Bibliography"
         case .skill: "Skills"
         case .plugin: "Plugin Packs"
         case .designMD: "Design Systems"
@@ -183,6 +185,7 @@ struct TypedDocumentsView: View {
         case .prompt: "System prompts, tone prompts, writing style guides, and client adapters."
         case .profile: "How you work, what you do, and collaboration defaults."
         case .directory: "Manual registry of important local folders and scan/edit policy."
+        case .bibliography: "Source metadata, BibTeX entries, citation notes, DOI/URL checks, and report-ready reference context."
         case .skill: "Portable agent capabilities with trigger conditions and bounded instructions."
         case .plugin: "Curated local packs of approved Markdown assets. No executable plugin code in this phase."
         case .designMD: "Agent-readable DESIGN.md files and visual system guidance."

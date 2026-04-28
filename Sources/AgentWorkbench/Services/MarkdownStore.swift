@@ -12,6 +12,7 @@ struct MarkdownStore {
             paths.prompts,
             paths.profile,
             paths.directories,
+            paths.bibliography,
             paths.skills,
             paths.plugins,
             paths.design,
@@ -234,6 +235,25 @@ struct MarkdownStore {
         )
 
         try writeSeedIfNeeded(
+            at: paths.bibliography.appendingPathComponent("bibliography-library.md"),
+            title: "Bibliography Library",
+            type: "bibliography",
+            body: """
+            # Bibliography Library
+
+            ## Purpose
+            First-class bibliography memory for papers, reports, grants, and research packs.
+
+            ## Policy
+            Keep imported BibTeX entries editable as Markdown. Preserve DOI, URL, source path, notes, and the raw BibTeX block so agents can verify citation claims before using them.
+
+            ## Raw BibTeX
+            ```bibtex
+            ```
+            """
+        )
+
+        try writeSeedIfNeeded(
             at: paths.gold.appendingPathComponent("README.md"),
             title: "Gold",
             type: "gold",
@@ -424,6 +444,56 @@ struct MarkdownStore {
         try content.write(to: url, atomically: true, encoding: .utf8)
     }
 
+    func importBibTeXFile(_ url: URL) throws -> Int {
+        let text = try String(contentsOf: url, encoding: .utf8)
+        return try importBibTeX(text, source: url.path)
+    }
+
+    func importBibTeX(_ text: String, source: String) throws -> Int {
+        let entries = BibTeXParser.parse(text)
+        for entry in entries {
+            try createBibliographyEntry(entry, source: source)
+        }
+        return entries.count
+    }
+
+    func validateBibliography(_ documents: [VaultDocument]) -> String {
+        var keys: [String: Int] = [:]
+        var missing: [String] = []
+
+        for document in documents {
+            let key = metadataValue("bibtex_key", in: document.body) ?? frontmatterValue("bibtex_key", in: fullContent(for: document)) ?? document.title
+            keys[key, default: 0] += 1
+
+            let lowerBody = document.body.lowercased()
+            let hasDOI = lowerBody.contains("doi:") || lowerBody.contains("doi =")
+            let hasURL = lowerBody.contains("url:") || lowerBody.contains("url =") || lowerBody.contains("http")
+            let hasYear = lowerBody.contains("year:") || lowerBody.contains("year =")
+            let hasTitle = !document.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+            var problems: [String] = []
+            if !hasTitle { problems.append("title") }
+            if !hasYear { problems.append("year") }
+            if !hasDOI && !hasURL { problems.append("doi/url") }
+            if !problems.isEmpty {
+                missing.append("- \(document.title): missing \(problems.joined(separator: ", "))")
+            }
+        }
+
+        let duplicates = keys
+            .filter { $0.value > 1 }
+            .map { "- \($0.key): \($0.value) entries" }
+            .sorted()
+
+        return """
+        Bibliography validation
+
+        Entries: \(documents.count)
+        Duplicate keys: \(duplicates.isEmpty ? "none" : "\n" + duplicates.joined(separator: "\n"))
+        Missing metadata: \(missing.isEmpty ? "none" : "\n" + missing.joined(separator: "\n"))
+        """
+    }
+
     func createDocument(type: VaultObjectType, title: String, body: String) throws {
         let directory = directory(for: type)
         let filename = "\(timestampSlug())-\(slugify(title.isEmpty ? type.rawValue : title)).md"
@@ -542,6 +612,7 @@ struct MarkdownStore {
         case .prompt: paths.prompts
         case .profile: paths.profile
         case .directory: paths.directories
+        case .bibliography: paths.bibliography
         case .codexJob: paths.jobs
         case .gold: paths.gold
         case .skill: paths.skills
@@ -632,6 +703,74 @@ struct MarkdownStore {
             createdAt: creationDate(url),
             status: frontmatterValue("status", in: content)
         )
+    }
+
+    private func createBibliographyEntry(_ entry: BibTeXEntry, source: String) throws {
+        let title = bibliographyTitle(for: entry)
+        let filename = "\(timestampSlug())-\(slugify(entry.key.isEmpty ? title : entry.key)).md"
+        let url = paths.bibliography.appendingPathComponent(filename)
+        let fields = entry.fields
+        let authors = fields["author"] ?? fields["editor"] ?? ""
+        let year = fields["year"] ?? fields["date"] ?? ""
+        let doi = fields["doi"] ?? ""
+        let itemURL = fields["url"] ?? ""
+        let content = """
+        ---
+        title: \(escapeYaml(title))
+        type: bibliography
+        bibtex_key: \(escapeYaml(entry.key))
+        entry_type: \(escapeYaml(entry.type))
+        authors: \(escapeYaml(authors))
+        year: \(escapeYaml(year))
+        doi: \(escapeYaml(doi))
+        url: \(escapeYaml(itemURL))
+        source: \(escapeYaml(source))
+        created_at: \(ISO8601DateFormatter().string(from: Date()))
+        ---
+
+        # \(title)
+
+        ## Citation Metadata
+        - bibtex_key: \(entry.key)
+        - entry_type: \(entry.type)
+        - authors: \(authors)
+        - year: \(year)
+        - doi: \(doi)
+        - url: \(itemURL)
+        - source: \(source)
+
+        ## Agent Notes
+        - Verify citation metadata before using in a paper, report, or grant.
+        - Preserve uncertainty if source metadata is incomplete.
+
+        ## Raw BibTeX
+        ```bibtex
+        \(entry.raw)
+        ```
+        """
+        try content.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private func bibliographyTitle(for entry: BibTeXEntry) -> String {
+        let rawTitle = entry.fields["title"] ?? entry.key
+        let year = entry.fields["year"] ?? ""
+        if year.isEmpty {
+            return rawTitle
+        }
+        return "\(rawTitle) (\(year))"
+    }
+
+    private func fullContent(for document: VaultDocument) -> String {
+        (try? String(contentsOf: document.path, encoding: .utf8)) ?? document.body
+    }
+
+    private func metadataValue(_ key: String, in body: String) -> String? {
+        body.split(separator: "\n").first { line in
+            line.trimmingCharacters(in: .whitespaces).hasPrefix("- \(key):")
+        }?
+        .description
+        .replacingOccurrences(of: "- \(key):", with: "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func codexJob(from url: URL) throws -> CodexJob {

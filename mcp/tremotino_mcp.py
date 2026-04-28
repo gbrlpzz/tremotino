@@ -16,6 +16,14 @@ from pathlib import Path
 from typing import Any
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+VENDORED_BIBTEXPARSER = REPO_ROOT / "third_party" / "python-bibtexparser"
+VENDORED_PYLATEXENC = REPO_ROOT / "third_party" / "pylatexenc"
+if VENDORED_PYLATEXENC.exists():
+    sys.path.insert(0, str(VENDORED_PYLATEXENC))
+if VENDORED_BIBTEXPARSER.exists():
+    sys.path.insert(0, str(VENDORED_BIBTEXPARSER))
+
 HOME = Path.home()
 VAULT = Path(
     os.environ.get(
@@ -29,6 +37,7 @@ WORKFLOWS = VAULT / "Workflows"
 PROMPTS = VAULT / "Prompts"
 PROFILE = VAULT / "Profile"
 DIRECTORIES = VAULT / "Directories"
+BIBLIOGRAPHY = VAULT / "Bibliography"
 SKILLS = VAULT / "Skills"
 PLUGINS = VAULT / "Plugins"
 DESIGN = VAULT / "Design"
@@ -129,6 +138,34 @@ TOOLS = [
     },
     {"name": "get_operating_profile", "description": "Fetch private operating profile notes.", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "list_directories", "description": "List manually registered directory notes.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "list_bibliography", "description": "List BibTeX-backed bibliography entries.", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "get_bibliography_entry",
+        "description": "Fetch a bibliography entry by title, BibTeX key, or path.",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
+    },
+    {
+        "name": "import_bibtex",
+        "description": "Import BibTeX content into native Tremotino bibliography Markdown entries.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string"},
+                "source": {"type": "string"},
+            },
+            "required": ["content"],
+        },
+    },
+    {"name": "validate_bibliography", "description": "Check bibliography entries for duplicate keys and missing metadata.", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "create_bibliography_review_job",
+        "description": "Queue a Codex job to review and normalize Tremotino bibliography memory.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"goal": {"type": "string"}},
+            "required": [],
+        },
+    },
     {
         "name": "assemble_context",
         "description": "Assemble workflow, prompt pack, profile, directories, and gold context for an agent task.",
@@ -256,6 +293,7 @@ def ensure_dirs() -> None:
         PROMPTS,
         PROFILE,
         DIRECTORIES,
+        BIBLIOGRAPHY,
         SKILLS,
         PLUGINS,
         DESIGN,
@@ -497,6 +535,179 @@ def list_directories(_: dict[str, Any]) -> dict[str, Any]:
     return text_response(json.dumps(list_docs(DIRECTORIES), indent=2))
 
 
+def parse_bibtex_entries(content: str) -> list[dict[str, Any]]:
+    try:
+        import bibtexparser  # type: ignore
+
+        library = bibtexparser.parse_string(content)
+        entries = []
+        for entry in getattr(library, "entries", []):
+            fields = {field.key.lower(): str(field.value) for field in getattr(entry, "fields", [])}
+            entries.append({
+                "type": str(getattr(entry, "entry_type", "")),
+                "key": str(getattr(entry, "key", "")),
+                "fields": fields,
+                "raw": str(getattr(entry, "raw", "")) or render_bibtex_entry(str(getattr(entry, "entry_type", "")), str(getattr(entry, "key", "")), fields),
+            })
+        if entries:
+            return entries
+    except Exception:
+        pass
+
+    return fallback_parse_bibtex_entries(content)
+
+
+def fallback_parse_bibtex_entries(content: str) -> list[dict[str, Any]]:
+    entries = []
+    pattern = re.compile(r"@(?P<type>[A-Za-z]+)\s*[{(](?P<body>.*?)[})]\s*(?=@|\Z)", re.DOTALL)
+    for match in pattern.finditer(content):
+        raw = match.group(0).strip()
+        body = match.group("body")
+        key, _, fields_text = body.partition(",")
+        fields: dict[str, str] = {}
+        for field_match in re.finditer(r"([A-Za-z0-9_:-]+)\s*=\s*[{\"']?([^,\n{}\"']+)", fields_text):
+            fields[field_match.group(1).lower()] = field_match.group(2).strip()
+        entries.append({"type": match.group("type").lower(), "key": key.strip(), "fields": fields, "raw": raw})
+    return entries
+
+
+def render_bibtex_entry(entry_type: str, key: str, fields: dict[str, str]) -> str:
+    lines = [f"@{entry_type or 'misc'}{{{key},"]
+    for field_key, value in fields.items():
+        lines.append(f"  {field_key} = {{{value}}},")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def bibliography_title(entry: dict[str, Any]) -> str:
+    fields = entry.get("fields", {})
+    title = str(fields.get("title") or entry.get("key") or "Untitled Reference")
+    year = str(fields.get("year") or fields.get("date") or "")
+    return f"{title} ({year})" if year else title
+
+
+def write_bibliography_entry(entry: dict[str, Any], source: str) -> Path:
+    ensure_dirs()
+    fields = entry.get("fields", {})
+    title = bibliography_title(entry)
+    key = str(entry.get("key", "reference"))
+    entry_type = str(entry.get("type", "misc"))
+    authors = str(fields.get("author") or fields.get("editor") or "")
+    year = str(fields.get("year") or fields.get("date") or "")
+    doi = str(fields.get("doi") or "")
+    url = str(fields.get("url") or "")
+    raw = str(entry.get("raw") or render_bibtex_entry(entry_type, key, fields))
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    path = BIBLIOGRAPHY / f"{stamp}-{slugify(key or title)}.md"
+    safe = {name: value.replace('"', '\\"') for name, value in {
+        "title": title,
+        "key": key,
+        "entry_type": entry_type,
+        "authors": authors,
+        "year": year,
+        "doi": doi,
+        "url": url,
+        "source": source,
+    }.items()}
+    body = f"""---
+title: "{safe['title']}"
+type: bibliography
+bibtex_key: "{safe['key']}"
+entry_type: "{safe['entry_type']}"
+authors: "{safe['authors']}"
+year: "{safe['year']}"
+doi: "{safe['doi']}"
+url: "{safe['url']}"
+source: "{safe['source']}"
+created_at: {dt.datetime.now(dt.timezone.utc).isoformat()}
+---
+
+# {title}
+
+## Citation Metadata
+- bibtex_key: {key}
+- entry_type: {entry_type}
+- authors: {authors}
+- year: {year}
+- doi: {doi}
+- url: {url}
+- source: {source}
+
+## Agent Notes
+- Verify citation metadata before using in a paper, report, or grant.
+- Preserve uncertainty if source metadata is incomplete.
+
+## Raw BibTeX
+```bibtex
+{raw}
+```
+"""
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+def list_bibliography(_: dict[str, Any]) -> dict[str, Any]:
+    return text_response(json.dumps(list_docs(BIBLIOGRAPHY), indent=2))
+
+
+def get_bibliography_entry(args: dict[str, Any]) -> dict[str, Any]:
+    return text_response(fetch_from(BIBLIOGRAPHY, str(args.get("id", ""))))
+
+
+def import_bibtex(args: dict[str, Any]) -> dict[str, Any]:
+    content = str(args.get("content", ""))
+    source = str(args.get("source", "mcp-bibtex-import"))
+    paths = [str(write_bibliography_entry(entry, source)) for entry in parse_bibtex_entries(content)]
+    return text_response(json.dumps({"imported": len(paths), "paths": paths}, indent=2))
+
+
+def validate_bibliography(_: dict[str, Any]) -> dict[str, Any]:
+    items = list_docs(BIBLIOGRAPHY)
+    keys: dict[str, int] = {}
+    missing = []
+    for item in items:
+        content = Path(item["path"]).read_text(encoding="utf-8", errors="ignore")
+        key = frontmatter_value(content, "bibtex_key") or item["title"]
+        keys[key] = keys.get(key, 0) + 1
+        lower = content.lower()
+        problems = []
+        if "year:" not in lower and "year =" not in lower:
+            problems.append("year")
+        if "doi:" not in lower and "doi =" not in lower and "url:" not in lower and "url =" not in lower and "http" not in lower:
+            problems.append("doi/url")
+        if problems:
+            missing.append({"title": item["title"], "missing": problems, "path": item["path"]})
+    duplicates = [{"key": key, "count": count} for key, count in sorted(keys.items()) if count > 1]
+    return text_response(json.dumps({"entries": len(items), "duplicates": duplicates, "missing": missing}, indent=2))
+
+
+def create_bibliography_review_job(args: dict[str, Any]) -> dict[str, Any]:
+    goal = str(args.get("goal", "Review, normalize, and connect bibliography memory to research context."))
+    entries = "\n\n---\n\n".join(
+        path.read_text(encoding="utf-8", errors="ignore")[:1800]
+        for path in sorted(BIBLIOGRAPHY.glob("*.md")) if BIBLIOGRAPHY.exists()
+    )
+    prompt = f"""You are running from Tremotino.
+
+Treat the bibliography library as first-class research memory. Do not invent metadata. Check duplicate keys, missing DOI/URL/year/author fields, citation integrity, and links to Gold or project context.
+
+Goal:
+{goal}
+
+Bibliography:
+{entries or "No bibliography entries found."}
+
+Write outputs only inside the Tremotino vault. Use Review proposals for uncertain durable claims.
+"""
+    return create_codex_job({
+        "title": "Review bibliography library",
+        "workflow": "Bibliography Management",
+        "prompt": prompt,
+        "working_directory": str(VAULT),
+        "writable_paths": [str(VAULT)],
+    })
+
+
 def assemble_context(args: dict[str, Any]) -> dict[str, Any]:
     task = str(args.get("task", ""))
     client = str(args.get("client", "codex"))
@@ -512,6 +723,8 @@ def assemble_context(args: dict[str, Any]) -> dict[str, Any]:
         fetch_from(WORKFLOWS, workflow_query),
         "## Directories",
         json.dumps(list_docs(DIRECTORIES), indent=2),
+        "## Bibliography",
+        json.dumps(list_docs(BIBLIOGRAPHY)[:12], indent=2),
         "## Gold Matches",
         build_project_context({"query": task})["content"][0]["text"],
     ]
@@ -666,6 +879,8 @@ def assemble_context_pack(args: dict[str, Any]) -> dict[str, Any]:
         ) or "No design files found.",
         "## Still Metadata",
         still_metadata,
+        "## Bibliography",
+        json.dumps(list_docs(BIBLIOGRAPHY)[:12], indent=2),
         "## Hay",
         json.dumps(list_docs(HAY)[:8], indent=2),
         "## Directories",
@@ -757,6 +972,11 @@ CALLS = {
     "get_prompt_pack": get_prompt_pack,
     "get_operating_profile": get_operating_profile,
     "list_directories": list_directories,
+    "list_bibliography": list_bibliography,
+    "get_bibliography_entry": get_bibliography_entry,
+    "import_bibtex": import_bibtex,
+    "validate_bibliography": validate_bibliography,
+    "create_bibliography_review_job": create_bibliography_review_job,
     "assemble_context": assemble_context,
     "create_codex_job": create_codex_job,
     "list_codex_jobs": list_codex_jobs,
@@ -811,6 +1031,7 @@ def handle(message: dict[str, Any]) -> dict[str, Any] | None:
             {"uri": "runbook://all", "name": "Runbooks", "description": "Available dry-run runbooks", "mimeType": "application/json"},
             {"uri": "skill://all", "name": "Skills", "description": str(SKILLS), "mimeType": "application/json"},
             {"uri": "plugin://all", "name": "Plugin Packs", "description": str(PLUGINS), "mimeType": "application/json"},
+            {"uri": "bibliography://all", "name": "Bibliography", "description": str(BIBLIOGRAPHY), "mimeType": "application/json"},
             {"uri": "design://all", "name": "Design", "description": str(DESIGN), "mimeType": "application/json"},
             {"uri": "still://all", "name": "Stills", "description": str(STILLS), "mimeType": "application/json"},
             {"uri": "context-pack://all", "name": "Context Packs", "description": str(CONTEXT_PACKS), "mimeType": "application/json"},

@@ -35,6 +35,7 @@ enum VaultObjectType: String, CaseIterable, Identifiable {
     case prompt
     case profile
     case directory
+    case bibliography
     case codexJob = "codex_job"
     case gold
     case skill
@@ -52,6 +53,7 @@ enum VaultObjectType: String, CaseIterable, Identifiable {
         case .prompt: "Prompt"
         case .profile: "Profile"
         case .directory: "Directory"
+        case .bibliography: "Bibliography"
         case .codexJob: "Codex Job"
         case .gold: "Gold"
         case .skill: "Skill"
@@ -163,6 +165,7 @@ struct WorkbenchPaths {
     let prompts: URL
     let profile: URL
     let directories: URL
+    let bibliography: URL
     let skills: URL
     let plugins: URL
     let design: URL
@@ -202,6 +205,7 @@ struct WorkbenchPaths {
             prompts: vaultRoot.appendingPathComponent("Prompts"),
             profile: vaultRoot.appendingPathComponent("Profile"),
             directories: vaultRoot.appendingPathComponent("Directories"),
+            bibliography: vaultRoot.appendingPathComponent("Bibliography"),
             skills: vaultRoot.appendingPathComponent("Skills"),
             plugins: vaultRoot.appendingPathComponent("Plugins"),
             design: vaultRoot.appendingPathComponent("Design"),

@@ -1,6 +1,7 @@
 import SwiftUI
 
 private enum LibraryTab: String, CaseIterable, Identifiable {
+    case bibliography
     case gold
     case skills
     case prompts
@@ -17,6 +18,7 @@ private enum LibraryTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .bibliography: "Bibliography"
         case .gold: "Gold"
         case .skills: "Skills"
         case .prompts: "Prompts"
@@ -33,7 +35,7 @@ private enum LibraryTab: String, CaseIterable, Identifiable {
 }
 
 struct LibraryView: View {
-    @State private var selectedTab: LibraryTab = .skills
+    @State private var selectedTab: LibraryTab = .bibliography
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -52,6 +54,8 @@ struct LibraryView: View {
             }
 
             switch selectedTab {
+            case .bibliography:
+                BibliographyView(showsHeader: false)
             case .gold:
                 TypedDocumentsView(type: .gold, showsHeader: false)
             case .skills:

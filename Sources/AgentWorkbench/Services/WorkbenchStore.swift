@@ -15,6 +15,7 @@ final class WorkbenchStore {
     var prompts: [VaultDocument] = []
     var profiles: [VaultDocument] = []
     var directories: [VaultDocument] = []
+    var bibliographies: [VaultDocument] = []
     var skills: [VaultDocument] = []
     var plugins: [VaultDocument] = []
     var designs: [VaultDocument] = []
@@ -52,6 +53,7 @@ final class WorkbenchStore {
         prompts = try markdownStore.listDocuments(type: .prompt)
         profiles = try markdownStore.listDocuments(type: .profile)
         directories = try markdownStore.listDocuments(type: .directory)
+        bibliographies = try markdownStore.listDocuments(type: .bibliography)
         skills = try markdownStore.listDocuments(type: .skill)
         plugins = try markdownStore.listDocuments(type: .plugin)
         designs = try markdownStore.listDocuments(type: .designMD)
@@ -128,6 +130,8 @@ final class WorkbenchStore {
                 body = "# \(title)\n\n## Includes\n- Operating profile\n- Prompt pack\n- Workflows\n- Design\n- Stills\n- Gold\n\n## Task Fit\n"
             case .hay:
                 body = "# \(title)\n\n## Raw Material\n\n## Extraction Goal\n\n## Output Preference\nPrefer durable Gold, typed prompts, workflows, profile updates, directory notes, or review proposals depending on risk.\n"
+            case .bibliography:
+                body = "# \(title)\n\n## Citation Metadata\n- bibtex_key:\n- entry_type:\n- authors:\n- year:\n- doi:\n- url:\n- source:\n\n## Agent Notes\n\n## Raw BibTeX\n```bibtex\n\n```\n"
             case .plugin:
                 body = "# \(title)\n\n## Purpose\n\n## Contents\n\n## Install Policy\nNo executable code. Import approved Markdown assets only.\n"
             case .skill:
@@ -156,6 +160,7 @@ final class WorkbenchStore {
             "## Prompt Pack\n\(promptMatches.map { $0.body }.joined(separator: "\n\n---\n\n"))",
             "## Design\n\(designs.map { $0.body }.joined(separator: "\n\n---\n\n"))",
             "## Stills\n\(stills.map { "\($0.title)\nPath: \($0.path.path)\n\n\($0.body)" }.joined(separator: "\n\n---\n\n"))",
+            "## Bibliography\n\(bibliographies.prefix(12).map { "\($0.title)\nPath: \($0.path.path)\n\n\($0.body.prefix(1200))" }.joined(separator: "\n\n---\n\n"))",
             "## Hay\n\(hayItems.prefix(8).map { $0.body }.joined(separator: "\n\n---\n\n"))",
             "## Gold\n\(goldItems.prefix(8).map { $0.body }.joined(separator: "\n\n---\n\n"))"
         ]
@@ -183,6 +188,47 @@ final class WorkbenchStore {
             statusMessage = "Queued Codex job from context pack"
         } catch {
             statusMessage = "Job creation failed: \(error.localizedDescription)"
+        }
+    }
+
+    func importBibTeX(from url: URL) {
+        do {
+            let imported = try markdownStore.importBibTeXFile(url)
+            try refresh()
+            statusMessage = "Imported \(imported) BibTeX entries"
+        } catch {
+            statusMessage = "BibTeX import failed: \(error.localizedDescription)"
+        }
+    }
+
+    func validateBibliography() {
+        statusMessage = markdownStore.validateBibliography(bibliographies)
+    }
+
+    func createBibliographyReviewJob() {
+        let prompt = """
+        You are running from Tremotino.
+
+        Review the Tremotino bibliography library as first-class research memory. Identify duplicate keys, missing DOI/URL/year/author metadata, citation-integrity risks, and entries that should be linked to Gold or research projects.
+
+        Write outputs only inside the Tremotino vault. Prefer Review proposals for uncertain durable claims.
+
+        Bibliography entries:
+        \(bibliographies.map { "## \($0.title)\nPath: \($0.path.path)\n\n\($0.body.prefix(1600))" }.joined(separator: "\n\n---\n\n"))
+        """
+
+        do {
+            _ = try markdownStore.createCodexJob(
+                title: "Review bibliography library",
+                workflow: "Bibliography Management",
+                prompt: prompt,
+                workingDirectory: paths.vaultRoot.path,
+                writablePaths: [paths.vaultRoot.path]
+            )
+            try refresh()
+            statusMessage = "Queued bibliography review job"
+        } catch {
+            statusMessage = "Bibliography job failed: \(error.localizedDescription)"
         }
     }
 
@@ -275,6 +321,11 @@ final class WorkbenchStore {
         if document.type == .hay {
             return """
             Extract signal from this disordered raw material. Turn reusable outputs into Gold, typed prompts, workflows, profile notes, directory notes, or review proposals. Preserve provenance, uncertainty, and source paths. Do not flatten uncertain claims into facts.
+            """
+        }
+        if document.type == .bibliography {
+            return """
+            Treat this bibliography entry as source metadata. Verify completeness, normalize notes, preserve the raw BibTeX block, and propose links to relevant Gold, research projects, or context packs. Do not invent DOI, author, year, or publication metadata.
             """
         }
         return """
