@@ -14,6 +14,7 @@ This repository contains an early SwiftUI prototype. It includes:
 - A local stdio MCP server with search, fetch, proposal, project context, and runbook tools.
 - A Codex CLI job queue for scoped `codex exec` workflows.
 - Typed Markdown vault objects for workflows, prompts, profile, directories, jobs, and gold items.
+- Agent assets for skills, curated plugin packs, `DESIGN.md` files, stills, context packs, and hay ingestion.
 - A minimal black-and-white macOS icon.
 
 ## Design principles
@@ -52,6 +53,18 @@ Smoke-test the MCP server:
 ./script/smoke_mcp.sh
 ```
 
+Print the Codex MCP configuration:
+
+```sh
+./script/install_codex_mcp.sh --print
+```
+
+Verify the Codex-facing MCP path:
+
+```sh
+./script/test_codex_mcp.sh
+```
+
 ## MCP server
 
 The local MCP server is at:
@@ -70,6 +83,7 @@ It exposes:
 - `list_projects`
 - `list_runbooks`
 - `run_runbook_dry_run`
+- workflow, prompt, profile, directory, skill, plugin, design, still, hay, context-pack, job, and gold tools
 
 See `docs/MCP_CLIENT_SETUP.md` for client setup notes.
 
@@ -80,6 +94,8 @@ Tremotino can queue and run scoped Codex CLI jobs. Job data is written under the
 App-launched jobs use `workspace-write` with explicit writable paths and never use the dangerous no-sandbox mode.
 
 The current runner pins `gpt-5.2` because the installed Codex CLI on this machine rejects newer configured defaults. This should become a user setting once the job launcher matures.
+
+Hay ingestion jobs take selected files or folders as raw source material, instruct Codex to leave those sources untouched, and write extracted signal into private vault objects such as Gold, prompts, workflows, directory notes, or review proposals.
 
 ## Data policy
 

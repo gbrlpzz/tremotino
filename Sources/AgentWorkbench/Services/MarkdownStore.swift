@@ -12,6 +12,13 @@ struct MarkdownStore {
             paths.prompts,
             paths.profile,
             paths.directories,
+            paths.skills,
+            paths.plugins,
+            paths.design,
+            paths.stills,
+            paths.stillFiles,
+            paths.contextPacks,
+            paths.hay,
             paths.jobs,
             paths.projects,
             paths.review,
@@ -238,6 +245,123 @@ struct MarkdownStore {
         )
 
         try writeSeedIfNeeded(
+            at: paths.skills.appendingPathComponent("skill-template.md"),
+            title: "Skill Template",
+            type: "skill",
+            body: """
+            # Skill Template
+
+            ## Purpose
+            A reusable agent capability with clear trigger conditions and bounded instructions.
+
+            ## When To Use
+            Describe the tasks or user wording that should activate this skill.
+
+            ## Instructions
+            Keep the skill portable across Codex, Claude, and future MCP clients.
+            """
+        )
+
+        try writeSeedIfNeeded(
+            at: paths.plugins.appendingPathComponent("curated-pack-template.md"),
+            title: "Curated Plugin Pack Template",
+            type: "plugin",
+            body: """
+            # Curated Plugin Pack Template
+
+            ## Purpose
+            A local pack of approved Markdown assets for Tremotino.
+
+            ## Contents
+            - Skills
+            - Prompts
+            - Workflows
+            - DESIGN.md files
+            - Context fragments
+
+            ## Policy
+            This phase does not auto-run executable plugin code. Import is explicit and reviewable.
+            """
+        )
+
+        try writeSeedIfNeeded(
+            at: paths.design.appendingPathComponent("tremotino-design.md"),
+            title: "Tremotino DESIGN.md",
+            type: "design_md",
+            body: """
+            # Tremotino DESIGN.md
+
+            ## Visual Direction
+            Hyper-minimal analog futurism. Black, white, precise lines, quiet mechanical references, and no decorative excess.
+
+            ## Typography
+            Prefer restrained system typography, tight information hierarchy, and compact work surfaces.
+
+            ## Components
+            Use native macOS controls, flat surfaces, thin separators, and small radius only where the platform expects it.
+
+            ## Agent Guidance
+            Design choices should make Tremotino feel like a private instrument for turning raw material into refined reusable context.
+            """
+        )
+
+        try writeSeedIfNeeded(
+            at: paths.stills.appendingPathComponent("still-template.md"),
+            title: "Still Template",
+            type: "still",
+            body: """
+            # Still Template
+
+            source:
+            license_privacy: private
+            media_path: Files/example.png
+            related_workflow:
+            intended_agent_use: Describe how agents should use this visual reference.
+
+            ## Notes
+            Stills are local media files with Markdown sidecars. Keep private media in `Stills/Files`.
+            """
+        )
+
+        try writeSeedIfNeeded(
+            at: paths.contextPacks.appendingPathComponent("codex-default.md"),
+            title: "Codex Default Context Pack",
+            type: "context_pack",
+            body: """
+            # Codex Default Context Pack
+
+            ## Includes
+            - Operating profile
+            - Shared operating prompt
+            - Writing style guide
+            - Codex adapter
+            - Tremotino DESIGN.md
+            - Relevant workflows, directories, stills, and gold context
+
+            ## Use
+            Assemble this pack before launching scoped Codex work from Tremotino.
+            """
+        )
+
+        try writeSeedIfNeeded(
+            at: paths.hay.appendingPathComponent("raw-material-template.md"),
+            title: "Raw Material Template",
+            type: "hay",
+            body: """
+            # Raw Material Template
+
+            ## Raw Material
+            Paste messy notes, source paths, exports, transcripts, screenshots references, or unsorted research material here.
+
+            ## Extraction Goal
+            Describe what signal Codex should extract.
+
+            ## Output Preference
+            Prefer durable Gold, typed prompts, workflows, profile updates, directory notes, or review proposals depending on risk.
+            """
+        )
+
+        try writeSeedIfNeeded(
             at: paths.runbooks.appendingPathComponent("rebuild-index.md"),
             title: "Rebuild Index",
             type: "runbook",
@@ -300,7 +424,16 @@ struct MarkdownStore {
         try content.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    func createCodexJob(title: String, workflow: String, prompt: String, workingDirectory: String, writablePaths: [String]) throws -> CodexJob {
+    func createDocument(type: VaultObjectType, title: String, body: String) throws {
+        let directory = directory(for: type)
+        let filename = "\(timestampSlug())-\(slugify(title.isEmpty ? type.rawValue : title)).md"
+        let url = directory.appendingPathComponent(filename)
+        let heading = title.isEmpty ? "Untitled \(type.title)" : title
+        let content = markdown(title: heading, type: type.rawValue, tags: [], body: body.isEmpty ? "# \(heading)\n" : body)
+        try content.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    func createCodexJob(title: String, workflow: String, prompt: String, workingDirectory: String, writablePaths: [String], sourcePaths: [String] = []) throws -> CodexJob {
         let folder = paths.jobs.appendingPathComponent("\(timestampSlug())-\(slugify(title))")
         try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
         let jobFile = folder.appendingPathComponent("job.md")
@@ -311,6 +444,7 @@ struct MarkdownStore {
             workflow: workflow,
             workingDirectory: workingDirectory,
             writablePaths: writablePaths,
+            sourcePaths: sourcePaths,
             startedAt: nil,
             finishedAt: nil,
             exitCode: nil
@@ -327,6 +461,7 @@ struct MarkdownStore {
             workflow: job.workflow,
             workingDirectory: job.workingDirectory,
             writablePaths: job.writablePaths,
+            sourcePaths: job.sourcePaths,
             startedAt: startedAt,
             finishedAt: finishedAt,
             exitCode: exitCode
@@ -409,6 +544,12 @@ struct MarkdownStore {
         case .directory: paths.directories
         case .codexJob: paths.jobs
         case .gold: paths.gold
+        case .skill: paths.skills
+        case .plugin: paths.plugins
+        case .designMD: paths.design
+        case .still: paths.stills
+        case .contextPack: paths.contextPacks
+        case .hay: paths.hay
         }
     }
 
@@ -499,6 +640,10 @@ struct MarkdownStore {
             .split(separator: "|")
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+        let sources = (frontmatterValue("source_paths", in: content) ?? "")
+            .split(separator: "|")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
         let exitCode = frontmatterValue("exit_code", in: content).flatMap(Int.init)
         return CodexJob(
             id: UUID(),
@@ -507,6 +652,7 @@ struct MarkdownStore {
             workflow: frontmatterValue("workflow", in: content) ?? "manual",
             workingDirectory: frontmatterValue("working_directory", in: content) ?? paths.vaultRoot.path,
             writablePaths: writable,
+            sourcePaths: sources,
             path: url,
             createdAt: creationDate(url),
             exitCode: exitCode
@@ -519,6 +665,7 @@ struct MarkdownStore {
         workflow: String,
         workingDirectory: String,
         writablePaths: [String],
+        sourcePaths: [String],
         startedAt: Date?,
         finishedAt: Date?,
         exitCode: Int?
@@ -534,6 +681,7 @@ struct MarkdownStore {
         working_directory: \(escapeYaml(workingDirectory))
         sandbox: workspace-write
         writable_paths: \(escapeYaml(writablePaths.joined(separator: "|")))
+        source_paths: \(escapeYaml(sourcePaths.joined(separator: "|")))
         created_at: \(formatter.string(from: Date()))
         started_at: \(startedAt.map(formatter.string(from:)) ?? "")
         finished_at: \(finishedAt.map(formatter.string(from:)) ?? "")

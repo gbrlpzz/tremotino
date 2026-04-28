@@ -8,6 +8,12 @@ Tremotino keeps private operating context in a local Markdown vault. The public 
 - `prompt`: system prompts, tone prompts, writing style guides, and client adapters.
 - `profile`: working preferences, collaboration defaults, recurring constraints, and durable self-context.
 - `directory`: manual registry of local folders with purpose, privacy, and allowed scan/edit policy.
+- `skill`: portable agent capability with trigger conditions and bounded instructions.
+- `plugin`: curated local Markdown asset pack. No executable code in the first implementation.
+- `design_md`: agent-readable `DESIGN.md` file with visual rules and implementation guidance.
+- `still`: Markdown sidecar for a local visual reference under `Stills/Files`.
+- `context_pack`: assembled bundle definition for profile, prompts, workflows, design, stills, hay, and gold.
+- `hay`: disordered raw material, source paths, transcripts, exports, folders, or files to be spun into durable signal by Codex jobs.
 - `codex_job`: queued or completed Codex CLI job plus artifacts.
 - `gold`: refined reusable context spun from raw notes, folders, or agent outputs.
 
@@ -25,3 +31,14 @@ A Codex job folder contains:
 - `post_snapshot.txt`
 
 Jobs are private vault data and should not be committed to this repository.
+
+## Asset Storage
+
+Stills use local media files plus Markdown sidecars:
+
+```text
+Vault/Stills/example.md
+Vault/Stills/Files/example.png
+```
+
+Hay ingestion jobs may reference source files or folders outside the vault. Those paths are treated as read-only raw material by prompt policy; extracted outputs are written back into the private vault.

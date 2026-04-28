@@ -31,6 +31,12 @@ struct JobsView: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
+                        if !job.sourcePaths.isEmpty {
+                            Text("Sources: \(job.sourcePaths.joined(separator: ", "))")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                        }
 
                         HStack {
                             Text(job.path.deletingLastPathComponent().path)

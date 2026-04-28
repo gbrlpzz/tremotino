@@ -26,6 +26,9 @@ struct CodexJobRunner {
         for writable in job.writablePaths where writable != vaultRoot.path && !writable.isEmpty {
             arguments.append(contentsOf: ["--add-dir", NSString(string: writable).expandingTildeInPath])
         }
+        for source in job.sourcePaths where source != vaultRoot.path && !source.isEmpty {
+            arguments.append(contentsOf: ["--add-dir", NSString(string: source).expandingTildeInPath])
+        }
         arguments.append(contentsOf: [
             "--json",
             "--output-last-message", finalFile.path,

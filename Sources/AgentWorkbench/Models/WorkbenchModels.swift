@@ -6,6 +6,12 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case prompts
     case profile
     case directories
+    case skills
+    case plugins
+    case design
+    case stills
+    case contextPacks
+    case hay
     case jobs
     case projects
     case review
@@ -23,6 +29,12 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .prompts: "Prompts"
         case .profile: "Profile"
         case .directories: "Directories"
+        case .skills: "Skills"
+        case .plugins: "Plugins"
+        case .design: "Design"
+        case .stills: "Stills"
+        case .contextPacks: "Context Packs"
+        case .hay: "Hay"
         case .jobs: "Jobs"
         case .projects: "Projects"
         case .review: "Review Queue"
@@ -40,6 +52,12 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .prompts: "text.quote"
         case .profile: "person.crop.square"
         case .directories: "folder.badge.gearshape"
+        case .skills: "sparkles.square.filled.on.square"
+        case .plugins: "puzzlepiece.extension"
+        case .design: "square.on.circle"
+        case .stills: "photo.on.rectangle"
+        case .contextPacks: "shippingbox"
+        case .hay: "sparkles"
         case .jobs: "terminal"
         case .projects: "folder"
         case .review: "checklist"
@@ -58,6 +76,12 @@ enum VaultObjectType: String, CaseIterable, Identifiable {
     case directory
     case codexJob = "codex_job"
     case gold
+    case skill
+    case plugin
+    case designMD = "design_md"
+    case still
+    case contextPack = "context_pack"
+    case hay
 
     var id: String { rawValue }
 
@@ -69,6 +93,12 @@ enum VaultObjectType: String, CaseIterable, Identifiable {
         case .directory: "Directory"
         case .codexJob: "Codex Job"
         case .gold: "Gold"
+        case .skill: "Skill"
+        case .plugin: "Plugin"
+        case .designMD: "Design"
+        case .still: "Still"
+        case .contextPack: "Context Pack"
+        case .hay: "Hay"
         }
     }
 }
@@ -159,6 +189,7 @@ struct CodexJob: Identifiable, Hashable {
     var workflow: String
     var workingDirectory: String
     var writablePaths: [String]
+    var sourcePaths: [String]
     var path: URL
     var createdAt: Date
     var exitCode: Int?
@@ -171,6 +202,13 @@ struct WorkbenchPaths {
     let prompts: URL
     let profile: URL
     let directories: URL
+    let skills: URL
+    let plugins: URL
+    let design: URL
+    let stills: URL
+    let stillFiles: URL
+    let contextPacks: URL
+    let hay: URL
     let jobs: URL
     let projects: URL
     let review: URL
@@ -203,6 +241,13 @@ struct WorkbenchPaths {
             prompts: vaultRoot.appendingPathComponent("Prompts"),
             profile: vaultRoot.appendingPathComponent("Profile"),
             directories: vaultRoot.appendingPathComponent("Directories"),
+            skills: vaultRoot.appendingPathComponent("Skills"),
+            plugins: vaultRoot.appendingPathComponent("Plugins"),
+            design: vaultRoot.appendingPathComponent("Design"),
+            stills: vaultRoot.appendingPathComponent("Stills"),
+            stillFiles: vaultRoot.appendingPathComponent("Stills").appendingPathComponent("Files"),
+            contextPacks: vaultRoot.appendingPathComponent("Context Packs"),
+            hay: vaultRoot.appendingPathComponent("Hay"),
             jobs: vaultRoot.appendingPathComponent("Jobs"),
             projects: vaultRoot.appendingPathComponent("Projects"),
             review: vaultRoot.appendingPathComponent("Review Queue"),

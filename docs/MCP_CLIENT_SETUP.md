@@ -32,10 +32,22 @@ Add this server to your Claude Desktop MCP configuration:
 
 ## Codex
 
-Use the same command and environment when registering a local stdio MCP server:
+Print the Codex MCP configuration:
 
 ```sh
-python3 "/Users/gabriele/Documents/New project 3/mcp/tremotino_mcp.py"
+./script/install_codex_mcp.sh --print
+```
+
+Apply it to `~/.codex/config.toml` only when you explicitly want to update the local Codex configuration:
+
+```sh
+./script/install_codex_mcp.sh --apply
+```
+
+Smoke-test the same stdio MCP path used by Codex:
+
+```sh
+./script/test_codex_mcp.sh
 ```
 
 ## Tools
@@ -59,3 +71,17 @@ python3 "/Users/gabriele/Documents/New project 3/mcp/tremotino_mcp.py"
 - `list_codex_jobs`
 - `get_codex_job`
 - `propose_gold`
+- `list_skills`
+- `get_skill`
+- `list_plugins`
+- `get_plugin`
+- `list_designs`
+- `get_design`
+- `list_stills`
+- `get_still`
+- `list_context_packs`
+- `assemble_context_pack`
+- `install_plugin_pack_dry_run`
+- `list_hay`
+- `get_hay`
+- `create_hay_ingestion_job`

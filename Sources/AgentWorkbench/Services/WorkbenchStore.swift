@@ -15,6 +15,12 @@ final class WorkbenchStore {
     var prompts: [VaultDocument] = []
     var profiles: [VaultDocument] = []
     var directories: [VaultDocument] = []
+    var skills: [VaultDocument] = []
+    var plugins: [VaultDocument] = []
+    var designs: [VaultDocument] = []
+    var stills: [VaultDocument] = []
+    var contextPacks: [VaultDocument] = []
+    var hayItems: [VaultDocument] = []
     var goldItems: [VaultDocument] = []
     var codexJobs: [CodexJob] = []
     var registrySnapshots: [RegistrySnapshot] = []
@@ -46,6 +52,12 @@ final class WorkbenchStore {
         prompts = try markdownStore.listDocuments(type: .prompt)
         profiles = try markdownStore.listDocuments(type: .profile)
         directories = try markdownStore.listDocuments(type: .directory)
+        skills = try markdownStore.listDocuments(type: .skill)
+        plugins = try markdownStore.listDocuments(type: .plugin)
+        designs = try markdownStore.listDocuments(type: .designMD)
+        stills = try markdownStore.listDocuments(type: .still)
+        contextPacks = try markdownStore.listDocuments(type: .contextPack)
+        hayItems = try markdownStore.listDocuments(type: .hay)
         goldItems = try markdownStore.listDocuments(type: .gold)
         codexJobs = try markdownStore.listCodexJobs()
     }
@@ -103,6 +115,119 @@ final class WorkbenchStore {
         }
     }
 
+    func createDocument(type: VaultObjectType) {
+        do {
+            let title = "Untitled \(type.title)"
+            let body: String
+            switch type {
+            case .designMD:
+                body = "# \(title)\n\n## Visual Direction\n\n## Typography\n\n## Components\n\n## Agent Guidance\n"
+            case .still:
+                body = "# \(title)\n\nsource:\nlicense_privacy: private\nmedia_path: Files/\nrelated_workflow:\nintended_agent_use:\n\n## Notes\n"
+            case .contextPack:
+                body = "# \(title)\n\n## Includes\n- Operating profile\n- Prompt pack\n- Workflows\n- Design\n- Stills\n- Gold\n\n## Task Fit\n"
+            case .hay:
+                body = "# \(title)\n\n## Raw Material\n\n## Extraction Goal\n\n## Output Preference\nPrefer durable Gold, typed prompts, workflows, profile updates, directory notes, or review proposals depending on risk.\n"
+            case .plugin:
+                body = "# \(title)\n\n## Purpose\n\n## Contents\n\n## Install Policy\nNo executable code. Import approved Markdown assets only.\n"
+            case .skill:
+                body = "# \(title)\n\n## Purpose\n\n## When To Use\n\n## Instructions\n"
+            default:
+                body = "# \(title)\n"
+            }
+            try markdownStore.createDocument(type: type, title: title, body: body)
+            try refresh()
+            statusMessage = "Created \(type.title.lowercased())"
+        } catch {
+            statusMessage = "Create failed: \(error.localizedDescription)"
+        }
+    }
+
+    func assembleContextPack(_ pack: VaultDocument, client: String) -> String {
+        let promptMatches = prompts.filter { document in
+            let name = document.path.deletingPathExtension().lastPathComponent.lowercased()
+            return name.contains("shared") || name.contains("writing") || name.contains(client.lowercased())
+        }
+        let sections = [
+            "# Tremotino Context Pack",
+            "Client: \(client)",
+            "## Pack\n\(pack.body)",
+            "## Operating Profile\n\(profiles.map { $0.body }.joined(separator: "\n\n---\n\n"))",
+            "## Prompt Pack\n\(promptMatches.map { $0.body }.joined(separator: "\n\n---\n\n"))",
+            "## Design\n\(designs.map { $0.body }.joined(separator: "\n\n---\n\n"))",
+            "## Stills\n\(stills.map { "\($0.title)\nPath: \($0.path.path)\n\n\($0.body)" }.joined(separator: "\n\n---\n\n"))",
+            "## Hay\n\(hayItems.prefix(8).map { $0.body }.joined(separator: "\n\n---\n\n"))",
+            "## Gold\n\(goldItems.prefix(8).map { $0.body }.joined(separator: "\n\n---\n\n"))"
+        ]
+        return sections.joined(separator: "\n\n")
+    }
+
+    func createCodexJob(from contextPack: VaultDocument, client: String = "codex") {
+        let prompt = """
+        You are running from Tremotino using an assembled context pack.
+
+        Use the following context to propose or perform scoped work inside the Tremotino vault. Keep edits limited to typed vault objects unless a workflow explicitly grants another writable path.
+
+        \(assembleContextPack(contextPack, client: client))
+        """
+
+        do {
+            _ = try markdownStore.createCodexJob(
+                title: "Context pack: \(contextPack.title)",
+                workflow: contextPack.title,
+                prompt: prompt,
+                workingDirectory: paths.vaultRoot.path,
+                writablePaths: [paths.vaultRoot.path]
+            )
+            try refresh()
+            statusMessage = "Queued Codex job from context pack"
+        } catch {
+            statusMessage = "Job creation failed: \(error.localizedDescription)"
+        }
+    }
+
+    func createHayIngestionJob(from hay: VaultDocument, sourcePaths: [String]) {
+        let expandedSources = sourcePaths
+            .map { NSString(string: $0).expandingTildeInPath }
+            .filter { !$0.isEmpty }
+        let prompt = """
+        You are running from Tremotino.
+
+        Spin hay into gold: inspect the provided files or folders as disordered raw material, extract durable signal, and write the refined result into the Tremotino vault.
+
+        Treat source paths as read-only raw material. Do not edit, delete, move, rename, or reformat source files. Write outputs only inside the Tremotino vault.
+
+        Source paths:
+        \(expandedSources.map { "- \($0)" }.joined(separator: "\n"))
+
+        Hay sidecar:
+        \(hay.title)
+
+        \(hay.body)
+
+        Output rules:
+        - Create Gold items for reusable claims, arguments, summaries, or research signal.
+        - Create typed prompts, workflows, profile notes, directory notes, or review proposals only when clearly useful.
+        - Preserve source paths and uncertainty.
+        - Keep private data in the vault; do not add anything to the public Tremotino repo.
+        """
+
+        do {
+            _ = try markdownStore.createCodexJob(
+                title: "Spin hay into gold: \(hay.title)",
+                workflow: "Hay Ingestion",
+                prompt: prompt,
+                workingDirectory: paths.vaultRoot.path,
+                writablePaths: [paths.vaultRoot.path],
+                sourcePaths: expandedSources
+            )
+            try refresh()
+            statusMessage = "Queued hay ingestion job"
+        } catch {
+            statusMessage = "Hay ingestion job failed: \(error.localizedDescription)"
+        }
+    }
+
     func spinIntoGold(title: String, body: String, source: String) {
         do {
             try markdownStore.createGold(title: title, body: body, source: source)
@@ -125,7 +250,7 @@ final class WorkbenchStore {
         \(document.type.rawValue)
 
         Task:
-        Improve or act on this typed Tremotino object according to its contents. You may directly edit typed private Tremotino vault objects. Keep changes scoped to the writable paths and preserve the Markdown/frontmatter structure.
+        \(codexInstruction(for: document))
 
         Content:
         \(document.body)
@@ -144,6 +269,17 @@ final class WorkbenchStore {
         } catch {
             statusMessage = "Job creation failed: \(error.localizedDescription)"
         }
+    }
+
+    private func codexInstruction(for document: VaultDocument) -> String {
+        if document.type == .hay {
+            return """
+            Extract signal from this disordered raw material. Turn reusable outputs into Gold, typed prompts, workflows, profile notes, directory notes, or review proposals. Preserve provenance, uncertainty, and source paths. Do not flatten uncertain claims into facts.
+            """
+        }
+        return """
+        Improve or act on this typed Tremotino object according to its contents. You may directly edit typed private Tremotino vault objects. Keep changes scoped to the writable paths and preserve the Markdown/frontmatter structure.
+        """
     }
 
     func createCodexJob(from note: WorkbenchNote) {

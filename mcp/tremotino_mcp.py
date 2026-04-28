@@ -29,6 +29,13 @@ WORKFLOWS = VAULT / "Workflows"
 PROMPTS = VAULT / "Prompts"
 PROFILE = VAULT / "Profile"
 DIRECTORIES = VAULT / "Directories"
+SKILLS = VAULT / "Skills"
+PLUGINS = VAULT / "Plugins"
+DESIGN = VAULT / "Design"
+STILLS = VAULT / "Stills"
+STILL_FILES = STILLS / "Files"
+CONTEXT_PACKS = VAULT / "Context Packs"
+HAY = VAULT / "Hay"
 JOBS = VAULT / "Jobs"
 PROJECTS = VAULT / "Projects"
 RUNBOOKS = VAULT / "Runbooks"
@@ -146,6 +153,7 @@ TOOLS = [
                 "workflow": {"type": "string"},
                 "working_directory": {"type": "string"},
                 "writable_paths": {"type": "array", "items": {"type": "string"}},
+                "source_paths": {"type": "array", "items": {"type": "string"}},
             },
             "required": ["title", "prompt"],
         },
@@ -169,11 +177,97 @@ TOOLS = [
             "required": ["title", "content"],
         },
     },
+    {"name": "list_skills", "description": "List local agent skills with lightweight metadata.", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "get_skill",
+        "description": "Fetch a skill by title or path.",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
+    },
+    {"name": "list_plugins", "description": "List curated local plugin packs.", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "get_plugin",
+        "description": "Fetch a curated plugin pack by title or path.",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
+    },
+    {"name": "list_designs", "description": "List agent-readable DESIGN.md objects.", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "get_design",
+        "description": "Fetch a DESIGN.md object by title or path.",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
+    },
+    {"name": "list_stills", "description": "List still sidecars with media metadata.", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "get_still",
+        "description": "Fetch a still sidecar by title or path.",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
+    },
+    {"name": "list_context_packs", "description": "List assembled-agent context pack definitions.", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "assemble_context_pack",
+        "description": "Assemble profile, prompts, design, still metadata, directories, and gold for a client.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "client": {"type": "string"},
+                "task": {"type": "string"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "install_plugin_pack_dry_run",
+        "description": "Preview importing a curated local plugin pack without copying or executing anything.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"id": {"type": "string"}},
+            "required": ["id"],
+        },
+    },
+    {"name": "list_hay", "description": "List raw disordered material ready for signal extraction.", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "get_hay",
+        "description": "Fetch a raw material item by title or path.",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
+    },
+    {
+        "name": "create_hay_ingestion_job",
+        "description": "Queue a Codex job to extract signal from raw material and spin it into durable Tremotino assets.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "goal": {"type": "string"},
+                "source_paths": {"type": "array", "items": {"type": "string"}},
+                "working_directory": {"type": "string"},
+            },
+            "required": ["id"],
+        },
+    },
 ]
 
 
 def ensure_dirs() -> None:
-    for directory in (VAULT, REVIEW, INBOX, WORKFLOWS, PROMPTS, PROFILE, DIRECTORIES, JOBS, PROJECTS, RUNBOOKS, GOLD):
+    for directory in (
+        VAULT,
+        REVIEW,
+        INBOX,
+        WORKFLOWS,
+        PROMPTS,
+        PROFILE,
+        DIRECTORIES,
+        SKILLS,
+        PLUGINS,
+        DESIGN,
+        STILLS,
+        STILL_FILES,
+        CONTEXT_PACKS,
+        HAY,
+        JOBS,
+        PROJECTS,
+        RUNBOOKS,
+        GOLD,
+    ):
         directory.mkdir(parents=True, exist_ok=True)
 
 
@@ -228,6 +322,25 @@ def list_docs(directory: Path) -> list[dict[str, str]]:
             "excerpt": re.sub(r"\s+", " ", body_for(content))[:260],
         })
     return items
+
+
+def list_still_docs() -> list[dict[str, str]]:
+    items = list_docs(STILLS)
+    for item in items:
+        content = Path(item["path"]).read_text(encoding="utf-8", errors="ignore")
+        media_path = frontmatter_value(content, "media_path") or inline_value(content, "media_path") or ""
+        item["media_path"] = media_path
+        item["license_privacy"] = frontmatter_value(content, "license_privacy") or inline_value(content, "license_privacy") or "private"
+        item["intended_agent_use"] = inline_value(content, "intended_agent_use") or ""
+    return items
+
+
+def inline_value(content: str, key: str) -> str | None:
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(f"{key}:"):
+            return stripped.split(":", 1)[1].strip().strip('"')
+    return None
 
 
 def fetch_from(directory: Path, identifier: str) -> str:
@@ -412,6 +525,9 @@ def create_codex_job(args: dict[str, Any]) -> dict[str, Any]:
     writable_paths = args.get("writable_paths", [str(VAULT)])
     if not isinstance(writable_paths, list):
         writable_paths = [str(writable_paths)]
+    source_paths = args.get("source_paths", [])
+    if not isinstance(source_paths, list):
+        source_paths = [str(source_paths)]
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     folder = JOBS / f"{stamp}-{slugify(title)}"
     folder.mkdir(parents=True, exist_ok=True)
@@ -420,6 +536,7 @@ def create_codex_job(args: dict[str, Any]) -> dict[str, Any]:
     safe_workflow = workflow.replace('"', '\\"')
     safe_working_directory = working_directory.replace('"', '\\"')
     safe_writable_paths = "|".join(map(str, writable_paths)).replace('"', '\\"')
+    safe_source_paths = "|".join(map(str, source_paths)).replace('"', '\\"')
     body = f"""---
 title: "{safe_title}"
 type: codex_job
@@ -429,6 +546,7 @@ client: codex
 working_directory: "{safe_working_directory}"
 sandbox: workspace-write
 writable_paths: "{safe_writable_paths}"
+source_paths: "{safe_source_paths}"
 created_at: {dt.datetime.now(dt.timezone.utc).isoformat()}
 started_at:
 finished_at:
@@ -452,6 +570,7 @@ def list_codex_jobs(_: dict[str, Any]) -> dict[str, Any]:
             "title": title_for(job, content),
             "status": frontmatter_value(content, "status") or "unknown",
             "workflow": frontmatter_value(content, "workflow") or "",
+            "source_paths": frontmatter_value(content, "source_paths") or "",
             "path": str(job),
         })
     return text_response(json.dumps(items, indent=2))
@@ -485,6 +604,142 @@ created_at: {dt.datetime.now(dt.timezone.utc).isoformat()}
     return text_response(f"Gold created: {path}")
 
 
+def list_skills(_: dict[str, Any]) -> dict[str, Any]:
+    return text_response(json.dumps(list_docs(SKILLS), indent=2))
+
+
+def get_skill(args: dict[str, Any]) -> dict[str, Any]:
+    return text_response(fetch_from(SKILLS, str(args.get("id", ""))))
+
+
+def list_plugins(_: dict[str, Any]) -> dict[str, Any]:
+    return text_response(json.dumps(list_docs(PLUGINS), indent=2))
+
+
+def get_plugin(args: dict[str, Any]) -> dict[str, Any]:
+    return text_response(fetch_from(PLUGINS, str(args.get("id", ""))))
+
+
+def list_designs(_: dict[str, Any]) -> dict[str, Any]:
+    return text_response(json.dumps(list_docs(DESIGN), indent=2))
+
+
+def get_design(args: dict[str, Any]) -> dict[str, Any]:
+    return text_response(fetch_from(DESIGN, str(args.get("id", ""))))
+
+
+def list_stills(_: dict[str, Any]) -> dict[str, Any]:
+    return text_response(json.dumps(list_still_docs(), indent=2))
+
+
+def get_still(args: dict[str, Any]) -> dict[str, Any]:
+    return text_response(fetch_from(STILLS, str(args.get("id", ""))))
+
+
+def list_context_packs(_: dict[str, Any]) -> dict[str, Any]:
+    return text_response(json.dumps(list_docs(CONTEXT_PACKS), indent=2))
+
+
+def assemble_context_pack(args: dict[str, Any]) -> dict[str, Any]:
+    client = str(args.get("client", "codex")).lower()
+    task = str(args.get("task", ""))
+    pack_id = str(args.get("id", task or "default"))
+    still_metadata = json.dumps(list_still_docs(), indent=2)
+    sections = [
+        "# Tremotino Context Pack",
+        f"Client: {client}",
+        f"Task: {task}",
+        "## Pack Definition",
+        fetch_from(CONTEXT_PACKS, pack_id),
+        "## Operating Profile",
+        get_operating_profile({})["content"][0]["text"],
+        "## Prompt Pack",
+        get_prompt_pack({"client": client})["content"][0]["text"],
+        "## Skills",
+        json.dumps(list_docs(SKILLS), indent=2),
+        "## Design",
+        "\n\n---\n\n".join(
+            path.read_text(encoding="utf-8", errors="ignore")
+            for path in sorted(DESIGN.glob("*.md")) if DESIGN.exists()
+        ) or "No design files found.",
+        "## Still Metadata",
+        still_metadata,
+        "## Hay",
+        json.dumps(list_docs(HAY)[:8], indent=2),
+        "## Directories",
+        json.dumps(list_docs(DIRECTORIES), indent=2),
+        "## Gold Matches",
+        build_project_context({"query": task})["content"][0]["text"] if task else json.dumps(list_docs(GOLD)[:8], indent=2),
+    ]
+    return text_response("\n\n".join(sections))
+
+
+def install_plugin_pack_dry_run(args: dict[str, Any]) -> dict[str, Any]:
+    plugin_id = str(args.get("id", ""))
+    plugin = fetch_from(PLUGINS, plugin_id)
+    response = {
+        "plugin": plugin_id,
+        "policy": "dry_run_only_no_executable_code",
+        "would_import": [
+            "Markdown skills into Skills/",
+            "Markdown prompts into Prompts/",
+            "Markdown workflows into Workflows/",
+            "DESIGN.md files into Design/",
+            "context fragments into Context Packs/",
+        ],
+        "source_preview": plugin[:1200],
+    }
+    return text_response(json.dumps(response, indent=2))
+
+
+def list_hay(_: dict[str, Any]) -> dict[str, Any]:
+    return text_response(json.dumps(list_docs(HAY), indent=2))
+
+
+def get_hay(args: dict[str, Any]) -> dict[str, Any]:
+    return text_response(fetch_from(HAY, str(args.get("id", ""))))
+
+
+def create_hay_ingestion_job(args: dict[str, Any]) -> dict[str, Any]:
+    hay_id = str(args.get("id", ""))
+    goal = str(args.get("goal", "Extract durable signal and spin it into Gold."))
+    working_directory = str(args.get("working_directory", VAULT))
+    source_paths = args.get("source_paths", [])
+    if not isinstance(source_paths, list):
+        source_paths = [str(source_paths)]
+    expanded_sources = [str(Path(str(path)).expanduser()) for path in source_paths if str(path).strip()]
+    hay = fetch_from(HAY, hay_id)
+    prompt = f"""You are running from Tremotino.
+
+Spin hay into gold: inspect the provided files or folders as disordered raw material, extract durable signal, and write refined outputs into the Tremotino vault.
+
+Treat source paths as read-only raw material. Do not edit, delete, move, rename, or reformat source files. Write outputs only inside the Tremotino vault.
+
+Goal:
+{goal}
+
+Source paths:
+{chr(10).join(f"- {path}" for path in expanded_sources) or "- No source paths provided"}
+
+Hay sidecar:
+{hay}
+
+Output rules:
+- Create Gold items for reusable claims, arguments, summaries, or research signal.
+- Create typed prompts, workflows, profile notes, directory notes, or review proposals only when clearly useful.
+- Preserve source paths and uncertainty.
+- Keep private data in the vault; do not add anything to the public Tremotino repo.
+"""
+    return create_codex_job({
+        "title": f"Spin hay into gold: {hay_id}",
+        "workflow": "Hay Ingestion",
+        "prompt": prompt,
+        "working_directory": working_directory,
+        "writable_paths": [str(VAULT)],
+        "source_paths": expanded_sources,
+    })
+
+
 CALLS = {
     "search": search,
     "fetch": fetch,
@@ -505,6 +760,20 @@ CALLS = {
     "list_codex_jobs": list_codex_jobs,
     "get_codex_job": get_codex_job,
     "propose_gold": propose_gold,
+    "list_skills": list_skills,
+    "get_skill": get_skill,
+    "list_plugins": list_plugins,
+    "get_plugin": get_plugin,
+    "list_designs": list_designs,
+    "get_design": get_design,
+    "list_stills": list_stills,
+    "get_still": get_still,
+    "list_context_packs": list_context_packs,
+    "assemble_context_pack": assemble_context_pack,
+    "install_plugin_pack_dry_run": install_plugin_pack_dry_run,
+    "list_hay": list_hay,
+    "get_hay": get_hay,
+    "create_hay_ingestion_job": create_hay_ingestion_job,
 }
 
 
@@ -538,6 +807,11 @@ def handle(message: dict[str, Any]) -> dict[str, Any] | None:
             {"uri": "memory://vault", "name": "Vault", "description": str(VAULT), "mimeType": "text/markdown"},
             {"uri": "review://queue", "name": "Review Queue", "description": str(REVIEW), "mimeType": "text/markdown"},
             {"uri": "runbook://all", "name": "Runbooks", "description": "Available dry-run runbooks", "mimeType": "application/json"},
+            {"uri": "skill://all", "name": "Skills", "description": str(SKILLS), "mimeType": "application/json"},
+            {"uri": "plugin://all", "name": "Plugin Packs", "description": str(PLUGINS), "mimeType": "application/json"},
+            {"uri": "design://all", "name": "Design", "description": str(DESIGN), "mimeType": "application/json"},
+            {"uri": "still://all", "name": "Stills", "description": str(STILLS), "mimeType": "application/json"},
+            {"uri": "context-pack://all", "name": "Context Packs", "description": str(CONTEXT_PACKS), "mimeType": "application/json"},
         ]
         return {"jsonrpc": "2.0", "id": message_id, "result": {"resources": resources}}
     if method == "prompts/list":

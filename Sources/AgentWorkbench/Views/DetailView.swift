@@ -15,6 +15,18 @@ struct DetailView: View {
             TypedDocumentsView(type: .profile)
         case .directories:
             TypedDocumentsView(type: .directory)
+        case .skills:
+            TypedDocumentsView(type: .skill)
+        case .plugins:
+            TypedDocumentsView(type: .plugin)
+        case .design:
+            TypedDocumentsView(type: .designMD)
+        case .stills:
+            StillsView()
+        case .contextPacks:
+            TypedDocumentsView(type: .contextPack)
+        case .hay:
+            TypedDocumentsView(type: .hay)
         case .jobs:
             JobsView()
         case .projects:
