@@ -2,10 +2,13 @@ import SwiftUI
 
 struct ProjectsView: View {
     @Environment(WorkbenchStore.self) private var store
+    var showsHeader = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HeaderView(title: "Projects", subtitle: "Workflow-centered memory for active work.")
+            if showsHeader {
+                HeaderView(title: "Projects", subtitle: "Workflow-centered memory for active work.")
+            }
 
             HStack {
                 Button {
@@ -38,6 +41,6 @@ struct ProjectsView: View {
 
             FooterStatusView()
         }
-        .padding()
+        .padding(showsHeader ? 16 : 0)
     }
 }

@@ -1,69 +1,30 @@
 import Foundation
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case inbox
-    case workflows
-    case prompts
-    case profile
-    case directories
-    case skills
-    case plugins
-    case design
-    case stills
-    case contextPacks
-    case hay
-    case jobs
-    case projects
+    case capture
+    case spin
     case review
-    case runbooks
-    case gold
-    case registry
+    case library
     case settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .inbox: "Inbox"
-        case .workflows: "Workflows"
-        case .prompts: "Prompts"
-        case .profile: "Profile"
-        case .directories: "Directories"
-        case .skills: "Skills"
-        case .plugins: "Plugins"
-        case .design: "Design"
-        case .stills: "Stills"
-        case .contextPacks: "Context Packs"
-        case .hay: "Hay"
-        case .jobs: "Jobs"
-        case .projects: "Projects"
-        case .review: "Review Queue"
-        case .runbooks: "Runbooks"
-        case .gold: "Gold"
-        case .registry: "Registry"
+        case .capture: "Capture"
+        case .spin: "Hay to Gold"
+        case .review: "Review"
+        case .library: "Agent Hub"
         case .settings: "Settings"
         }
     }
 
     var icon: String {
         switch self {
-        case .inbox: "tray"
-        case .workflows: "flowchart"
-        case .prompts: "text.quote"
-        case .profile: "person.crop.square"
-        case .directories: "folder.badge.gearshape"
-        case .skills: "sparkles.square.filled.on.square"
-        case .plugins: "puzzlepiece.extension"
-        case .design: "square.on.circle"
-        case .stills: "photo.on.rectangle"
-        case .contextPacks: "shippingbox"
-        case .hay: "sparkles"
-        case .jobs: "terminal"
-        case .projects: "folder"
+        case .capture: "tray.and.arrow.down"
+        case .spin: "arrow.triangle.2.circlepath"
         case .review: "checklist"
-        case .runbooks: "play.square"
-        case .gold: "seal"
-        case .registry: "antenna.radiowaves.left.and.right"
+        case .library: "point.3.connected.trianglepath.dotted"
         case .settings: "gearshape"
         }
     }

@@ -5,7 +5,7 @@ struct InboxView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HeaderView(title: "Inbox", subtitle: "Fast capture before filing into durable memory.")
+            HeaderView(title: "Capture", subtitle: "Fast inbox for notes, links, rough prompts, and raw material.")
 
             if store.inboxNotes.isEmpty {
                 EmptyStateView(title: "No captures yet", detail: "Use Quick Capture or Cmd-Shift-N to add the first note.")

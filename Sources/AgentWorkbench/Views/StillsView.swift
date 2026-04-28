@@ -3,12 +3,15 @@ import AppKit
 
 struct StillsView: View {
     @Environment(WorkbenchStore.self) private var store
+    var showsHeader = true
     @State private var selectedID: UUID?
     @State private var draft: VaultDocument?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HeaderView(title: "Stills", subtitle: "Local visual references stored as media files plus Markdown sidecars.")
+            if showsHeader {
+                HeaderView(title: "Stills", subtitle: "Local visual references stored as media files plus Markdown sidecars.")
+            }
 
             HStack {
                 Button("New Still") {
@@ -82,7 +85,7 @@ struct StillsView: View {
 
             FooterStatusView()
         }
-        .padding()
+        .padding(showsHeader ? 16 : 0)
     }
 
     private var draftBinding: Binding<VaultDocument>? {

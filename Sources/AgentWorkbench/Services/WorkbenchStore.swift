@@ -3,7 +3,7 @@ import Observation
 
 @Observable
 final class WorkbenchStore {
-    var selection: SidebarItem? = .inbox
+    var selection: SidebarItem? = .capture
     var showQuickCapture = false
     var captureTitle = ""
     var captureBody = ""

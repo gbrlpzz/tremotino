@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct TypedDocumentsView: View {
     @Environment(WorkbenchStore.self) private var store
     let type: VaultObjectType
+    var showsHeader = true
     @State private var selectedID: UUID?
     @State private var draft: VaultDocument?
     @State private var haySourcePaths = ""
@@ -28,7 +29,9 @@ struct TypedDocumentsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HeaderView(title: sectionTitle, subtitle: sectionSubtitle)
+            if showsHeader {
+                HeaderView(title: sectionTitle, subtitle: sectionSubtitle)
+            }
 
             HStack {
                 Button("New \(type.title)") {
@@ -127,7 +130,7 @@ struct TypedDocumentsView: View {
 
             FooterStatusView()
         }
-        .padding()
+        .padding(showsHeader ? 16 : 0)
         .fileImporter(
             isPresented: $showHaySourcePicker,
             allowedContentTypes: [.item, .folder],

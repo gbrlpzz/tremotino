@@ -5,7 +5,7 @@ struct ReviewQueueView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HeaderView(title: "Review Queue", subtitle: "Agent-written updates wait here before becoming durable memory.")
+            HeaderView(title: "Review", subtitle: "Agent-written updates wait here before becoming durable memory.")
 
             if store.proposals.isEmpty {
                 EmptyStateView(title: "No proposals", detail: "Project scans and MCP propose tools will add pending items here.")

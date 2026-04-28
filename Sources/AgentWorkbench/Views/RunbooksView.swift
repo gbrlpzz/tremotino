@@ -2,10 +2,13 @@ import SwiftUI
 
 struct RunbooksView: View {
     @Environment(WorkbenchStore.self) private var store
+    var showsHeader = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HeaderView(title: "Runbooks", subtitle: "Safe workflow actions exposed as reviewable buttons and MCP dry runs.")
+            if showsHeader {
+                HeaderView(title: "Runbooks", subtitle: "Safe workflow actions exposed as reviewable buttons and MCP dry runs.")
+            }
 
             List(store.runbooks) { runbook in
                 VStack(alignment: .leading, spacing: 6) {
@@ -36,6 +39,6 @@ struct RunbooksView: View {
 
             FooterStatusView()
         }
-        .padding()
+        .padding(showsHeader ? 16 : 0)
     }
 }

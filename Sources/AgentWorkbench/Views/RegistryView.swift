@@ -2,10 +2,13 @@ import SwiftUI
 
 struct RegistryView: View {
     @Environment(WorkbenchStore.self) private var store
+    var showsHeader = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HeaderView(title: "MCP Registry", subtitle: "Monitor protocol and registry updates without auto-installing servers.")
+            if showsHeader {
+                HeaderView(title: "MCP Registry", subtitle: "Monitor protocol and registry updates without auto-installing servers.")
+            }
 
             Button {
                 Task { await store.refreshRegistry() }
@@ -40,6 +43,6 @@ struct RegistryView: View {
 
             FooterStatusView()
         }
-        .padding()
+        .padding(showsHeader ? 16 : 0)
     }
 }

@@ -2,10 +2,13 @@ import SwiftUI
 
 struct JobsView: View {
     @Environment(WorkbenchStore.self) private var store
+    var showsHeader = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HeaderView(title: "Codex Jobs", subtitle: "Queued scoped Codex CLI work. Jobs require a manual Run click.")
+            if showsHeader {
+                HeaderView(title: "Codex Jobs", subtitle: "Queued scoped Codex CLI work. Jobs require a manual Run click.")
+            }
 
             if store.codexJobs.isEmpty {
                 EmptyStateView(title: "No jobs queued", detail: "Use Send to Codex from Workflows, Prompts, Profile, Inbox, or Gold.")
@@ -56,6 +59,6 @@ struct JobsView: View {
 
             FooterStatusView()
         }
-        .padding()
+        .padding(showsHeader ? 16 : 0)
     }
 }
