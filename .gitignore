@@ -1,0 +1,15 @@
+.build/
+dist/
+.DS_Store
+*.xcuserdata/
+__pycache__/
+Resources/Tremotino.iconset/
+*.pyc
+
+# Local/private data should stay outside the repository, but keep this guard
+# in case someone points the vault into the checkout.
+Vault/
+Data/
+*.sqlite
+*.sqlite3
+*.db
