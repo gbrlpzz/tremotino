@@ -4,19 +4,15 @@ struct DetailView: View {
     @Environment(WorkbenchStore.self) private var store
 
     var body: some View {
-        switch store.selection ?? .skills {
-        case .capture:
-            InboxView()
+        switch store.selection ?? .library {
         case .spin:
             SpinView()
-        case .skills:
-            SkillsView()
-        case .context:
+        case .library:
             LibraryView()
+        case .agents:
+            AgentsView()
         case .review:
             ReviewQueueView()
-        case .settings:
-            SettingsView()
         }
     }
 }

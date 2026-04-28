@@ -10,6 +10,9 @@ struct MarkdownStore {
             paths.libraryRoot,
             paths.workRoot,
             paths.systemRoot,
+            paths.contextRoot,
+            paths.knowledgeRoot,
+            paths.assetsRoot,
             paths.inbox,
             paths.workflows,
             paths.prompts,
@@ -26,6 +29,7 @@ struct MarkdownStore {
             paths.jobs,
             paths.projects,
             paths.review,
+            paths.migrationReports,
             paths.runbooks,
             paths.gold,
             paths.supportRoot
@@ -33,7 +37,9 @@ struct MarkdownStore {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }
         try migrateLegacyLayoutIfNeeded()
-        try syncCrossAgentSkillsIfNeeded()
+        try flattenExternalSkillsIfNeeded()
+        try surfaceVendoredPackSkillsIfNeeded()
+        _ = try syncCrossAgentSkills()
 
         try writeSeedIfNeeded(
             at: paths.vaultRoot.appendingPathComponent("README.md"),
@@ -715,29 +721,46 @@ struct MarkdownStore {
     }
 
     private func migrateLegacyLayoutIfNeeded() throws {
-        let moves: [(String, URL)] = [
-            ("Inbox", paths.inbox),
-            ("Workflows", paths.workflows),
-            ("Prompts", paths.prompts),
-            ("Profile", paths.profile),
-            ("Directories", paths.directories),
-            ("Bibliography", paths.bibliography),
-            ("Skills", paths.skills),
-            ("Plugins", paths.plugins),
-            ("Design", paths.design),
-            ("Stills", paths.stills),
-            ("Context Packs", paths.contextPacks),
-            ("Hay", paths.hay),
-            ("Jobs", paths.jobs),
-            ("Projects", paths.projects),
-            ("Review Queue", paths.review),
-            ("Runbooks", paths.runbooks),
-            ("Gold", paths.gold)
+        let moves: [(URL, URL, String)] = [
+            (paths.libraryRoot.appendingPathComponent("Workflows"), paths.workflows, "group workflows under Library/Context"),
+            (paths.libraryRoot.appendingPathComponent("Prompts"), paths.prompts, "group prompts under Library/Context"),
+            (paths.libraryRoot.appendingPathComponent("Profile"), paths.profile, "group profile under Library/Context"),
+            (paths.libraryRoot.appendingPathComponent("Directories"), paths.directories, "group directories under Library/Context"),
+            (paths.libraryRoot.appendingPathComponent("Context Packs"), paths.contextPacks, "group context packs under Library/Context"),
+            (paths.libraryRoot.appendingPathComponent("Bibliography"), paths.bibliography, "group bibliography under Library/Knowledge"),
+            (paths.libraryRoot.appendingPathComponent("Gold"), paths.gold, "group gold under Library/Knowledge"),
+            (paths.libraryRoot.appendingPathComponent("Projects"), paths.projects, "group projects under Library/Knowledge"),
+            (paths.libraryRoot.appendingPathComponent("Packs"), paths.plugins, "group packs under Library/Assets"),
+            (paths.libraryRoot.appendingPathComponent("Design"), paths.design, "group design under Library/Assets"),
+            (paths.libraryRoot.appendingPathComponent("Stills"), paths.stills, "group stills under Library/Assets"),
+            (paths.vaultRoot.appendingPathComponent("Inbox"), paths.inbox, "move inbox under Work"),
+            (paths.vaultRoot.appendingPathComponent("Workflows"), paths.workflows, "move workflows into canonical layout"),
+            (paths.vaultRoot.appendingPathComponent("Prompts"), paths.prompts, "move prompts into canonical layout"),
+            (paths.vaultRoot.appendingPathComponent("Profile"), paths.profile, "move profile into canonical layout"),
+            (paths.vaultRoot.appendingPathComponent("Directories"), paths.directories, "move directories into canonical layout"),
+            (paths.vaultRoot.appendingPathComponent("Bibliography"), paths.bibliography, "move bibliography into canonical layout"),
+            (paths.vaultRoot.appendingPathComponent("Skills"), paths.skills, "move skills into canonical layout"),
+            (paths.vaultRoot.appendingPathComponent("Plugins"), paths.plugins, "move plugin packs into canonical layout"),
+            (paths.vaultRoot.appendingPathComponent("Design"), paths.design, "move design into canonical layout"),
+            (paths.vaultRoot.appendingPathComponent("Stills"), paths.stills, "move stills into canonical layout"),
+            (paths.vaultRoot.appendingPathComponent("Context Packs"), paths.contextPacks, "move context packs into canonical layout"),
+            (paths.vaultRoot.appendingPathComponent("Hay"), paths.hay, "move hay under Work"),
+            (paths.vaultRoot.appendingPathComponent("Jobs"), paths.jobs, "move jobs under Work"),
+            (paths.vaultRoot.appendingPathComponent("Projects"), paths.projects, "move projects into canonical layout"),
+            (paths.vaultRoot.appendingPathComponent("Review Queue"), paths.review, "move review queue under Work"),
+            (paths.vaultRoot.appendingPathComponent("Runbooks"), paths.runbooks, "move runbooks under System"),
+            (paths.vaultRoot.appendingPathComponent("Gold"), paths.gold, "move gold into canonical layout")
         ]
 
-        for (legacyName, destination) in moves {
-            let source = paths.vaultRoot.appendingPathComponent(legacyName)
-            guard source.path != destination.path, fileManager.fileExists(atPath: source.path) else { continue }
+        let planned = moves.filter { source, destination, _ in
+            source.path != destination.path && fileManager.fileExists(atPath: source.path)
+        }
+
+        if !planned.isEmpty {
+            try writeMigrationReport(planned)
+        }
+
+        for (source, destination, _) in planned {
             try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
             let children = try fileManager.contentsOfDirectory(at: source, includingPropertiesForKeys: nil)
             for child in children {
@@ -749,6 +772,27 @@ struct MarkdownStore {
                 try fileManager.removeItem(at: source)
             }
         }
+    }
+
+    private func writeMigrationReport(_ moves: [(URL, URL, String)]) throws {
+        let filename = "\(timestampSlug())-migration-applied.md"
+        let url = paths.migrationReports.appendingPathComponent(filename)
+        let body = moves.map { source, destination, reason in
+            "- move `\(source.path)` -> `\(destination.path)`\n  reason: \(reason)"
+        }.joined(separator: "\n")
+        let content = """
+        ---
+        title: "Tremotino Migration Report"
+        type: migration_report
+        status: applied
+        created_at: \(ISO8601DateFormatter().string(from: Date()))
+        ---
+
+        # Tremotino Migration Report
+
+        \(body)
+        """
+        try content.write(to: url, atomically: true, encoding: .utf8)
     }
 
     private func moveItemMergingDirectories(from source: URL, to destination: URL) throws {
@@ -779,24 +823,23 @@ struct MarkdownStore {
         try fileManager.moveItem(at: source, to: destination)
     }
 
-    private func syncCrossAgentSkillsIfNeeded() throws {
+    func syncCrossAgentSkills() throws -> [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let sources: [(String, URL)] = [
             ("agents", home.appendingPathComponent(".agents/skills")),
             ("codex", home.appendingPathComponent(".codex/skills"))
         ]
 
+        var copied: [String] = []
         for (sourceName, sourceRoot) in sources {
             guard fileManager.fileExists(atPath: sourceRoot.path) else { continue }
-            let destinationRoot = paths.skills
-                .appendingPathComponent("External")
-                .appendingPathComponent(sourceName)
             try fileManager.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
             let children = try fileManager.contentsOfDirectory(at: sourceRoot, includingPropertiesForKeys: nil)
             for child in children where fileManager.fileExists(atPath: child.appendingPathComponent("SKILL.md").path) {
-                let destination = destinationRoot.appendingPathComponent(child.lastPathComponent)
+                let destination = uniqueSkillDestination(for: child.lastPathComponent, source: sourceName)
                 if !fileManager.fileExists(atPath: destination.path) {
                     try fileManager.copyItem(at: child, to: destination)
+                    copied.append(destination.path)
                 }
                 try writeCrossAgentSkillContextIfNeeded(
                     at: destination.appendingPathComponent("TREMOTINO.md"),
@@ -805,6 +848,11 @@ struct MarkdownStore {
                 )
             }
         }
+        return copied
+    }
+
+    private var destinationRoot: URL {
+        paths.skills
     }
 
     private func writeCrossAgentSkillContextIfNeeded(at url: URL, sourcePath: String, sourceName: String) throws {
@@ -829,6 +877,59 @@ struct MarkdownStore {
         Keep the default external skill wiring usable. Tremotino stores this copy so the skill library is portable, annotatable, and available through MCP even if a future agent client uses a different local convention.
         """
         try content.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private func flattenExternalSkillsIfNeeded() throws {
+        let externalRoot = paths.skills.appendingPathComponent("External")
+        guard fileManager.fileExists(atPath: externalRoot.path) else { return }
+        let sourceRoots = try fileManager.contentsOfDirectory(at: externalRoot, includingPropertiesForKeys: nil)
+        for sourceRoot in sourceRoots where sourceRoot.hasDirectoryPath {
+            let sourceName = sourceRoot.lastPathComponent
+            let skills = try fileManager.contentsOfDirectory(at: sourceRoot, includingPropertiesForKeys: nil)
+            for skill in skills where fileManager.fileExists(atPath: skill.appendingPathComponent("SKILL.md").path) {
+                let destination = uniqueSkillDestination(for: skill.lastPathComponent, source: sourceName)
+                if !fileManager.fileExists(atPath: destination.path) {
+                    try moveItemMergingDirectories(from: skill, to: destination)
+                }
+                try writeCrossAgentSkillContextIfNeeded(
+                    at: destination.appendingPathComponent("TREMOTINO.md"),
+                    sourcePath: skill.path,
+                    sourceName: sourceName
+                )
+            }
+        }
+    }
+
+    private func surfaceVendoredPackSkillsIfNeeded() throws {
+        guard fileManager.fileExists(atPath: paths.plugins.path),
+              let enumerator = fileManager.enumerator(at: paths.plugins, includingPropertiesForKeys: nil)
+        else { return }
+
+        for case let skillFile as URL in enumerator where skillFile.lastPathComponent == "SKILL.md" {
+            let sourceDirectory = skillFile.deletingLastPathComponent()
+            guard !sourceDirectory.path.hasPrefix(paths.skills.path) else { continue }
+            let destination = uniqueSkillDestination(for: sourceDirectory.lastPathComponent, source: "pack")
+            if !fileManager.fileExists(atPath: destination.path) {
+                try fileManager.copyItem(at: sourceDirectory, to: destination)
+            }
+            try writeCrossAgentSkillContextIfNeeded(
+                at: destination.appendingPathComponent("TREMOTINO.md"),
+                sourcePath: sourceDirectory.path,
+                sourceName: "pack"
+            )
+        }
+    }
+
+    private func uniqueSkillDestination(for skillID: String, source: String) -> URL {
+        let base = paths.skills.appendingPathComponent(slugify(skillID))
+        if !fileManager.fileExists(atPath: base.path) {
+            return base
+        }
+        let context = base.appendingPathComponent("TREMOTINO.md")
+        if let content = try? String(contentsOf: context, encoding: .utf8), content.contains(source) {
+            return base
+        }
+        return paths.skills.appendingPathComponent("\(slugify(source))-\(slugify(skillID))")
     }
 
     private func note(from url: URL) -> WorkbenchNote {

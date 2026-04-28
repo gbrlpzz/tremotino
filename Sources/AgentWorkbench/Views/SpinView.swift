@@ -1,25 +1,25 @@
 import SwiftUI
 
 private enum SpinTab: String, CaseIterable, Identifiable {
+    case inbox
     case hay
-    case contextPacks
     case jobs
-    case projects
+    case gold
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .inbox: "Inbox"
         case .hay: "Inputs"
-        case .contextPacks: "Context"
         case .jobs: "Jobs"
-        case .projects: "Projects"
+        case .gold: "Gold"
         }
     }
 }
 
 struct SpinView: View {
-    @State private var selectedTab: SpinTab = .hay
+    @State private var selectedTab: SpinTab = .inbox
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -33,14 +33,14 @@ struct SpinView: View {
             .pickerStyle(.segmented)
 
             switch selectedTab {
+            case .inbox:
+                InboxView(showsHeader: false)
             case .hay:
                 TypedDocumentsView(type: .hay, showsHeader: false)
-            case .contextPacks:
-                TypedDocumentsView(type: .contextPack, showsHeader: false)
             case .jobs:
                 JobsView(showsHeader: false)
-            case .projects:
-                ProjectsView(showsHeader: false)
+            case .gold:
+                TypedDocumentsView(type: .gold, showsHeader: false)
             }
         }
         .padding()

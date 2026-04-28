@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 TMP_VAULT="$(mktemp -d /tmp/tremotino-bib-mcp.XXXXXX)"
+TMP_SUPPORT="$TMP_VAULT/.tremotino-support"
 
 printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
@@ -13,4 +14,4 @@ printf '%s\n' \
   '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"annotate_bibliography_entry","arguments":{"id":"smith2026signal","used_for":"MCP smoke follow-up","annotation":"Confirmed bibliography entries can be annotated after import.","agent":"tremotino-smoke"}}}' \
   '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"list_bibliography","arguments":{}}}' \
   '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"validate_bibliography","arguments":{}}}' \
-  | TREMOTINO_VAULT="$TMP_VAULT" python3 mcp/tremotino_mcp.py
+  | TREMOTINO_VAULT="$TMP_VAULT" TREMOTINO_SUPPORT="$TMP_SUPPORT" python3 mcp/tremotino_mcp.py

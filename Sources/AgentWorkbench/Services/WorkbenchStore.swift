@@ -3,7 +3,7 @@ import Observation
 
 @Observable
 final class WorkbenchStore {
-    var selection: SidebarItem? = .skills
+    var selection: SidebarItem? = .library
     var showQuickCapture = false
     var captureTitle = ""
     var captureBody = ""
@@ -31,6 +31,7 @@ final class WorkbenchStore {
 
     let paths = WorkbenchPaths.defaults
     private var markdownStore: MarkdownStore { MarkdownStore(paths: paths) }
+    private var coreClient: TremotinoCoreClient { TremotinoCoreClient(paths: paths) }
     private var citableSourceRule: String {
         """
         Citable source rule:
@@ -73,6 +74,26 @@ final class WorkbenchStore {
         codexJobs = try markdownStore.listCodexJobs()
     }
 
+    var libraryDocuments: [VaultDocument] {
+        let durable = skills
+            + prompts
+            + workflows
+            + profiles
+            + directories
+            + designs
+            + bibliographies
+            + goldItems
+            + stills
+            + plugins
+            + contextPacks
+        return durable.sorted { lhs, rhs in
+            if lhs.type.rawValue != rhs.type.rawValue {
+                return lhs.type.rawValue < rhs.type.rawValue
+            }
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        }
+    }
+
     func saveCapture() {
         do {
             try markdownStore.createInboxNote(title: captureTitle, body: captureBody, tags: ["capture"])
@@ -88,11 +109,25 @@ final class WorkbenchStore {
 
     func rebuildIndex() async {
         do {
-            indexCount = try markdownStore.rebuildIndex()
+            if let coreCount = try? coreClient.rebuildIndex() {
+                indexCount = coreCount
+            } else {
+                indexCount = try markdownStore.rebuildIndex()
+            }
             try refresh()
             statusMessage = "Rebuilt index from \(indexCount) Markdown files"
         } catch {
             statusMessage = "Index rebuild failed: \(error.localizedDescription)"
+        }
+    }
+
+    func syncSkills() {
+        do {
+            let copied = try markdownStore.syncCrossAgentSkills()
+            try refresh()
+            statusMessage = copied.isEmpty ? "Skill library already synced" : "Synced \(copied.count) skills"
+        } catch {
+            statusMessage = "Skill sync failed: \(error.localizedDescription)"
         }
     }
 

@@ -1,34 +1,28 @@
 import Foundation
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case capture
     case spin
-    case skills
-    case context
+    case library
+    case agents
     case review
-    case settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .capture: "Capture"
         case .spin: "Hay to Gold"
-        case .skills: "Skills"
-        case .context: "Context"
+        case .library: "Library"
+        case .agents: "Agents"
         case .review: "Review"
-        case .settings: "Settings"
         }
     }
 
     var icon: String {
         switch self {
-        case .capture: "tray.and.arrow.down"
         case .spin: "arrow.triangle.2.circlepath"
-        case .skills: "sparkle.magnifyingglass"
-        case .context: "point.3.connected.trianglepath.dotted"
+        case .library: "books.vertical"
+        case .agents: "point.3.connected.trianglepath.dotted"
         case .review: "checklist"
-        case .settings: "gearshape"
         }
     }
 }
@@ -166,6 +160,9 @@ struct WorkbenchPaths {
     let libraryRoot: URL
     let workRoot: URL
     let systemRoot: URL
+    let contextRoot: URL
+    let knowledgeRoot: URL
+    let assetsRoot: URL
     let inbox: URL
     let workflows: URL
     let prompts: URL
@@ -182,6 +179,7 @@ struct WorkbenchPaths {
     let jobs: URL
     let projects: URL
     let review: URL
+    let migrationReports: URL
     let runbooks: URL
     let gold: URL
     let supportRoot: URL
@@ -206,30 +204,38 @@ struct WorkbenchPaths {
         let libraryRoot = vaultRoot.appendingPathComponent("Library")
         let workRoot = vaultRoot.appendingPathComponent("Work")
         let systemRoot = vaultRoot.appendingPathComponent("System")
+        let contextRoot = libraryRoot.appendingPathComponent("Context")
+        let knowledgeRoot = libraryRoot.appendingPathComponent("Knowledge")
+        let assetsRoot = libraryRoot.appendingPathComponent("Assets")
+        let stills = assetsRoot.appendingPathComponent("Stills")
 
         return WorkbenchPaths(
             vaultRoot: vaultRoot,
             libraryRoot: libraryRoot,
             workRoot: workRoot,
             systemRoot: systemRoot,
+            contextRoot: contextRoot,
+            knowledgeRoot: knowledgeRoot,
+            assetsRoot: assetsRoot,
             inbox: workRoot.appendingPathComponent("Inbox"),
-            workflows: libraryRoot.appendingPathComponent("Workflows"),
-            prompts: libraryRoot.appendingPathComponent("Prompts"),
-            profile: libraryRoot.appendingPathComponent("Profile"),
-            directories: libraryRoot.appendingPathComponent("Directories"),
-            bibliography: libraryRoot.appendingPathComponent("Bibliography"),
+            workflows: contextRoot.appendingPathComponent("Workflows"),
+            prompts: contextRoot.appendingPathComponent("Prompts"),
+            profile: contextRoot.appendingPathComponent("Profile"),
+            directories: contextRoot.appendingPathComponent("Directories"),
+            bibliography: knowledgeRoot.appendingPathComponent("Bibliography"),
             skills: libraryRoot.appendingPathComponent("Skills"),
-            plugins: libraryRoot.appendingPathComponent("Packs"),
-            design: libraryRoot.appendingPathComponent("Design"),
-            stills: libraryRoot.appendingPathComponent("Stills"),
-            stillFiles: libraryRoot.appendingPathComponent("Stills").appendingPathComponent("Files"),
-            contextPacks: libraryRoot.appendingPathComponent("Context Packs"),
+            plugins: assetsRoot.appendingPathComponent("Packs"),
+            design: assetsRoot.appendingPathComponent("Design"),
+            stills: stills,
+            stillFiles: stills.appendingPathComponent("Files"),
+            contextPacks: contextRoot.appendingPathComponent("Context Packs"),
             hay: workRoot.appendingPathComponent("Hay"),
             jobs: workRoot.appendingPathComponent("Jobs"),
-            projects: libraryRoot.appendingPathComponent("Projects"),
+            projects: knowledgeRoot.appendingPathComponent("Projects"),
             review: workRoot.appendingPathComponent("Review"),
+            migrationReports: workRoot.appendingPathComponent("Migration Reports"),
             runbooks: systemRoot.appendingPathComponent("Runbooks"),
-            gold: libraryRoot.appendingPathComponent("Gold"),
+            gold: knowledgeRoot.appendingPathComponent("Gold"),
             supportRoot: supportRoot,
             indexFile: supportRoot.appendingPathComponent("index.json"),
             mcpServer: packageRoot.appendingPathComponent("mcp/tremotino_mcp.py")

@@ -4,6 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
+if [[ -z "${TREMOTINO_VAULT:-}" ]]; then
+  TREMOTINO_VAULT="$(mktemp -d /tmp/tremotino-mcp-smoke.XXXXXX)"
+  export TREMOTINO_VAULT
+fi
+
+export TREMOTINO_SUPPORT="${TREMOTINO_SUPPORT:-$TREMOTINO_VAULT/.tremotino-support}"
+
 printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \

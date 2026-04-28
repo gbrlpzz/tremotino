@@ -8,12 +8,24 @@ The vault root is intentionally simple:
 
 ```text
 Vault/
-  Library/   durable portable agent context
+  Library/   durable portable agent library
   Work/      inbox, hay, review queue, Codex jobs
   System/    runbooks and local operating files
 ```
 
 Most typed objects live under `Library/`. Volatile work artifacts live under `Work/`.
+
+The re-architected library is grouped by intent:
+
+```text
+Vault/Library/
+  Skills/      first-class installed skills, one folder per skill
+  Context/     prompts, profiles, workflows, directories, context packs
+  Knowledge/   bibliography, gold, projects
+  Assets/      curated packs, DESIGN.md files, still sidecars and media
+```
+
+Generated indexes remain outside the vault at `~/Library/Application Support/Tremotino/`, unless a test sets `TREMOTINO_SUPPORT` to a temporary path.
 
 ## Types
 
@@ -21,7 +33,7 @@ Most typed objects live under `Library/`. Volatile work artifacts live under `Wo
 - `prompt`: system prompts, tone prompts, writing style guides, and client adapters.
 - `profile`: working preferences, collaboration defaults, recurring constraints, and durable self-context.
 - `directory`: manual registry of local folders with purpose, privacy, and allowed scan/edit policy.
-- `skill`: portable agent capability with trigger conditions and bounded instructions.
+- `skill`: portable agent capability with trigger conditions and bounded instructions. Canonical path is `Library/Skills/<skill-id>/SKILL.md`.
 - `plugin`: curated local Markdown asset pack. No executable code in the first implementation.
 - `design_md`: agent-readable `DESIGN.md` file with visual rules and implementation guidance.
 - `still`: Markdown sidecar for a local visual reference under `Stills/Files`.
@@ -50,11 +62,17 @@ Jobs are private vault data and should not be committed to this repository.
 Stills use local media files plus Markdown sidecars:
 
 ```text
-Vault/Library/Stills/example.md
-Vault/Library/Stills/Files/example.png
+Vault/Library/Assets/Stills/example.md
+Vault/Library/Assets/Stills/Files/example.png
 ```
 
 Hay ingestion jobs may reference source files or folders outside the vault. Those paths are treated as read-only raw material by prompt policy; extracted outputs are written back into the private vault.
+
+## Migration
+
+Tremotino writes a migration report under `Work/Migration Reports/` before applying canonical layout moves. Migration preserves Markdown source files and moves old direct library folders into the grouped layout.
+
+Vendored pack skills are copied into `Library/Skills/<skill-id>/` with a `TREMOTINO.md` origin sidecar. Supporting files stay inside the skill folder and remain available to MCP resources.
 
 ## Private Git Backup
 

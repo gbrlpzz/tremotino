@@ -2,10 +2,13 @@ import SwiftUI
 
 struct InboxView: View {
     @Environment(WorkbenchStore.self) private var store
+    var showsHeader = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HeaderView(title: "Capture", subtitle: "Fast inbox for notes, links, rough prompts, and raw material.")
+            if showsHeader {
+                HeaderView(title: "Capture", subtitle: "Fast inbox for notes, links, rough prompts, and raw material.")
+            }
 
             if store.inboxNotes.isEmpty {
                 EmptyStateView(title: "No captures yet", detail: "Use Quick Capture or Cmd-Shift-N to add the first note.")
@@ -36,6 +39,6 @@ struct InboxView: View {
 
             FooterStatusView()
         }
-        .padding()
+        .padding(showsHeader ? 16 : 0)
     }
 }
